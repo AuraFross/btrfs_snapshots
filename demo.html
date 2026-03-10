@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTRFS Snapshots - Unraid Plugin Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <style>
+        /* Unraid Dark Theme Base */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #ccc;
+            font-size: 14px;
+            min-height: 100vh;
+        }
+        a { color: #2196f3; text-decoration: none; }
+        a:hover { color: #64b5f6; }
+        input, select {
+            background: #2a2a2a; color: #ccc; border: 1px solid #444;
+            padding: 6px 10px; border-radius: 3px; font-size: 13px;
+        }
+        select { cursor: pointer; }
+        input:focus, select:focus { border-color: #2196f3; outline: none; }
+
+        /* Unraid-style Header */
+        .unraid-header {
+            background: #0a0a0a;
+            border-bottom: 1px solid #333;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            height: 48px;
+        }
+        .unraid-header .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ff8c2f;
+            margin-right: 30px;
+        }
+        .unraid-nav { display: flex; gap: 0; height: 100%; }
+        .unraid-nav a {
+            color: #888;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            height: 100%;
+            font-size: 13px;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .unraid-nav a:hover { color: #ccc; background: rgba(255,255,255,0.03); }
+        .unraid-nav a.active { color: #ff8c2f; border-bottom-color: #ff8c2f; }
+
+        /* Unraid-style Submenu */
+        .unraid-submenu {
+            background: #111;
+            border-bottom: 1px solid #333;
+            padding: 0 20px;
+            display: flex;
+            gap: 0;
+            height: 38px;
+        }
+        .unraid-submenu a {
+            color: #888;
+            padding: 0 14px;
+            display: flex;
+            align-items: center;
+            height: 100%;
+            font-size: 12px;
+            border-bottom: 2px solid transparent;
+        }
+        .unraid-submenu a:hover { color: #ccc; }
+        .unraid-submenu a.active { color: #fff; border-bottom-color: #2196f3; }
+        .unraid-submenu a i { margin-right: 6px; }
+
+        /* Page Content */
+        .page-content { padding: 20px 24px; max-width: 1200px; }
+        .page-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .page-title i { color: #888; }
+
+        /* Tab Navigation */
+        .tab-nav { display: flex; gap: 4px; margin-bottom: 20px; }
+        .tab-btn {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #888;
+            padding: 8px 18px;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: #ccc; background: rgba(255,255,255,0.06); }
+        .tab-btn.active { color: #fff; background: rgba(255,255,255,0.08); border-bottom-color: #1a1a1a; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Plugin CSS (inlined) */
+        :root {
+            --snap-green: #4caf50;
+            --snap-amber: #ff9800;
+            --snap-red: #f44336;
+            --snap-blue: #2196f3;
+            --snap-bg-card: rgba(255,255,255,0.04);
+            --snap-border: rgba(255,255,255,0.08);
+            --snap-text: #ccc;
+            --snap-text-dim: #888;
+            --snap-radius: 4px;
+        }
+        .badge-ok, .badge-warning, .badge-error, .badge-info {
+            display: inline-block; padding: 2px 8px; border-radius: 3px;
+            font-size: 0.8em; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.03em; line-height: 1.6; vertical-align: middle;
+        }
+        .badge-ok { background: rgba(76,175,80,0.15); color: var(--snap-green); border: 1px solid rgba(76,175,80,0.3); }
+        .badge-warning { background: rgba(255,152,0,0.15); color: var(--snap-amber); border: 1px solid rgba(255,152,0,0.3); }
+        .badge-error { background: rgba(244,67,54,0.15); color: var(--snap-red); border: 1px solid rgba(244,67,54,0.3); }
+        .badge-info { background: rgba(33,150,243,0.15); color: var(--snap-blue); border: 1px solid rgba(33,150,243,0.3); }
+
+        .snap-status-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .snap-status-card {
+            background: var(--snap-bg-card); border: 1px solid var(--snap-border);
+            border-radius: var(--snap-radius); padding: 16px; text-align: center;
+        }
+        .snap-status-card .stat-value { font-size: 2em; font-weight: 700; color: #fff; line-height: 1.2; }
+        .snap-status-card .stat-label { font-size: 0.85em; color: var(--snap-text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .snap-status-card.status-enabled .stat-value { color: var(--snap-green); }
+
+        .snap-section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--snap-border);
+        }
+        .snap-section-header h2 { margin: 0; font-size: 1.1em; font-weight: 600; }
+        .snap-section-header .snap-toolbar { display: flex; gap: 6px; align-items: center; }
+
+        .snap-info-box {
+            background: rgba(33,150,243,0.08); border: 1px solid rgba(33,150,243,0.2);
+            border-radius: var(--snap-radius); padding: 12px 16px; margin-bottom: 16px; font-size: 0.9em;
+        }
+        .snap-info-box i { color: var(--snap-blue); margin-right: 6px; }
+        .snap-warning-box {
+            background: rgba(255,152,0,0.08); border: 1px solid rgba(255,152,0,0.2);
+            border-radius: var(--snap-radius); padding: 12px 16px; margin-bottom: 16px; font-size: 0.9em;
+        }
+        .snap-warning-box i { color: var(--snap-amber); margin-right: 6px; }
+
+        table.snap-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        table.snap-table thead th {
+            text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--snap-border);
+            color: var(--snap-text-dim); font-weight: 600; font-size: 0.85em;
+            text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+        }
+        table.snap-table tbody td {
+            padding: 10px 12px; border-bottom: 1px solid var(--snap-border);
+            color: var(--snap-text); vertical-align: middle;
+        }
+        table.snap-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+        table.snap-table .col-actions { white-space: nowrap; text-align: right; }
+
+        .snap-btn {
+            display: inline-block; padding: 4px 10px; border-radius: var(--snap-radius);
+            border: 1px solid var(--snap-border); background: rgba(255,255,255,0.06);
+            color: var(--snap-text); cursor: pointer; font-size: 0.85em; text-decoration: none;
+            transition: background 0.15s, border-color 0.15s; margin-left: 4px; line-height: 1.5;
+        }
+        .snap-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: #fff; }
+        .snap-btn:first-child { margin-left: 0; }
+        .snap-btn i { margin-right: 4px; }
+        .snap-btn-primary { background: rgba(33,150,243,0.15); border-color: rgba(33,150,243,0.3); color: var(--snap-blue); }
+        .snap-btn-primary:hover { background: rgba(33,150,243,0.25); color: #64b5f6; }
+        .snap-btn-success { background: rgba(76,175,80,0.15); border-color: rgba(76,175,80,0.3); color: var(--snap-green); }
+        .snap-btn-success:hover { background: rgba(76,175,80,0.25); color: #81c784; }
+        .snap-btn-danger { background: rgba(244,67,54,0.15); border-color: rgba(244,67,54,0.3); color: var(--snap-red); }
+        .snap-btn-warning { background: rgba(255,152,0,0.15); border-color: rgba(255,152,0,0.3); color: var(--snap-amber); }
+
+        .snap-disk-tag {
+            display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.8em;
+            background: rgba(255,255,255,0.06); border: 1px solid var(--snap-border); margin: 1px 2px; white-space: nowrap;
+        }
+        .snap-disk-tag.btrfs-yes { border-color: rgba(76,175,80,0.3); color: var(--snap-green); }
+        .snap-disk-tag.btrfs-no { border-color: rgba(255,255,255,0.1); color: var(--snap-text-dim); }
+
+        /* Settings form */
+        .snap-settings-form dl { margin: 0; }
+        .snap-settings-form dt { padding: 10px 0 4px 0; font-weight: 600; color: var(--snap-text); }
+        .snap-settings-form dd { padding: 0 0 10px 0; margin: 0; }
+        .snap-settings-form dd select, .snap-settings-form dd input[type="text"], .snap-settings-form dd input[type="number"] { min-width: 200px; }
+        .snap-retention-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; max-width: 500px; }
+        .snap-retention-grid label { font-size: 0.85em; color: var(--snap-text-dim); display: block; margin-bottom: 3px; }
+        .snap-retention-grid input { width: 100%; box-sizing: border-box; }
+        .snap-help { font-size: 0.82em; color: var(--snap-text-dim); margin-top: 3px; font-style: italic; }
+
+        /* Snapshot modal */
+        .snap-modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); z-index: 9000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .snap-modal-overlay.visible { display: flex; }
+        .snap-modal {
+            background: #1a1a1a; border: 1px solid var(--snap-border); border-radius: 6px;
+            width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        .snap-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--snap-border);
+        }
+        .snap-modal-header h3 { margin: 0; font-size: 1.05em; }
+        .snap-modal-close { background: none; border: none; color: var(--snap-text-dim); font-size: 1.3em; cursor: pointer; }
+        .snap-modal-close:hover { color: #fff; }
+        .snap-modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+
+        /* Demo banner */
+        .demo-banner {
+            background: linear-gradient(90deg, #ff8c2f, #e65100);
+            color: #fff; text-align: center; padding: 8px; font-size: 12px; font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="demo-banner">
+    DEMO PREVIEW — This is how the plugin will appear inside Unraid's WebGUI
+</div>
+
+<!-- Unraid Header -->
+<div class="unraid-header">
+    <div class="logo">unRAID</div>
+    <div class="unraid-nav">
+        <a href="#">Dashboard</a>
+        <a href="#">Main</a>
+        <a href="#">Shares</a>
+        <a href="#">Users</a>
+        <a href="#">Settings</a>
+        <a href="#" class="active">Utilities</a>
+        <a href="#">Docker</a>
+        <a href="#">VMs</a>
+        <a href="#">Apps</a>
+    </div>
+</div>
+
+<!-- Unraid Submenu -->
+<div class="unraid-submenu">
+    <a href="#" onclick="showTab('dashboard')" class="active" id="nav-dashboard"><i class="fa fa-camera-retro"></i> BTRFS Snapshots</a>
+    <a href="#" onclick="showTab('settings')" id="nav-settings"><i class="fa fa-cog"></i> Settings</a>
+    <a href="#" onclick="showTab('share')" id="nav-share"><i class="fa fa-folder"></i> Share: Documents</a>
+</div>
+
+<!-- ═══════════════════ DASHBOARD TAB ═══════════════════ -->
+<div class="tab-content active" id="tab-dashboard">
+<div class="page-content">
+
+    <!-- Status Cards -->
+    <div class="snap-status-grid">
+        <div class="snap-status-card status-enabled">
+            <div class="stat-value">Enabled</div>
+            <div class="stat-label">Plugin Status</div>
+        </div>
+        <div class="snap-status-card">
+            <div class="stat-value">5</div>
+            <div class="stat-label">BTRFS Shares</div>
+        </div>
+        <div class="snap-status-card">
+            <div class="stat-value">147</div>
+            <div class="stat-label">Total Snapshots</div>
+        </div>
+        <div class="snap-status-card">
+            <div class="stat-value">Hourly</div>
+            <div class="stat-label">Default Schedule</div>
+        </div>
+    </div>
+
+    <!-- Section Header -->
+    <div class="snap-section-header">
+        <h2><i class="fa fa-folder-open"></i> Shares</h2>
+        <div class="snap-toolbar">
+            <button class="snap-btn snap-btn-primary" onclick="showToast('Shares refreshed', 'success')">
+                <i class="fa fa-refresh"></i> Refresh
+            </button>
+            <a class="snap-btn" href="#" onclick="showTab('settings')">
+                <i class="fa fa-cog"></i> Settings
+            </a>
+        </div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="snap-info-box">
+        <i class="fa fa-info-circle"></i>
+        Snapshots require BTRFS-formatted disks with shares as subvolumes. Shares on non-BTRFS disks or not configured as subvolumes will show conversion options.
+    </div>
+
+    <!-- Shares Table -->
+    <div class="snap-table-wrap">
+        <table class="snap-table">
+            <thead>
+                <tr>
+                    <th>Share Name</th>
+                    <th>Disk(s)</th>
+                    <th>BTRFS</th>
+                    <th>Subvolume</th>
+                    <th>Snapshots</th>
+                    <th>Last Snapshot</th>
+                    <th style="text-align:right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Documents</strong></td>
+                    <td>
+                        <span class="snap-disk-tag btrfs-yes">disk1</span>
+                        <span class="snap-disk-tag btrfs-yes">cache</span>
+                    </td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td>42</td>
+                    <td>2026-03-09 14:00:00 UTC</td>
+                    <td class="col-actions">
+                        <button class="snap-btn snap-btn-success" onclick="showToast('Snapshot created for Documents', 'success')" title="Create Snapshot"><i class="fa fa-camera"></i></button>
+                        <button class="snap-btn snap-btn-primary" onclick="showModal('Documents')" title="View Snapshots"><i class="fa fa-list"></i></button>
+                        <a class="snap-btn" href="#" onclick="showTab('share')" title="Configure"><i class="fa fa-cog"></i></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Photos</strong></td>
+                    <td>
+                        <span class="snap-disk-tag btrfs-yes">disk2</span>
+                        <span class="snap-disk-tag btrfs-yes">disk3</span>
+                    </td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td>38</td>
+                    <td>2026-03-09 14:00:00 UTC</td>
+                    <td class="col-actions">
+                        <button class="snap-btn snap-btn-success" title="Create Snapshot"><i class="fa fa-camera"></i></button>
+                        <button class="snap-btn snap-btn-primary" onclick="showModal('Photos')" title="View Snapshots"><i class="fa fa-list"></i></button>
+                        <a class="snap-btn" href="#" title="Configure"><i class="fa fa-cog"></i></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Media</strong></td>
+                    <td>
+                        <span class="snap-disk-tag btrfs-yes">disk1</span>
+                        <span class="snap-disk-tag btrfs-yes">disk2</span>
+                        <span class="snap-disk-tag btrfs-yes">disk3</span>
+                    </td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td>35</td>
+                    <td>2026-03-09 14:00:00 UTC</td>
+                    <td class="col-actions">
+                        <button class="snap-btn snap-btn-success" title="Create Snapshot"><i class="fa fa-camera"></i></button>
+                        <button class="snap-btn snap-btn-primary" onclick="showModal('Media')" title="View Snapshots"><i class="fa fa-list"></i></button>
+                        <a class="snap-btn" href="#" title="Configure"><i class="fa fa-cog"></i></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Backups</strong></td>
+                    <td>
+                        <span class="snap-disk-tag btrfs-yes">disk4</span>
+                    </td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td><span class="badge-warning">No</span></td>
+                    <td>0</td>
+                    <td><span style="color:#888">—</span></td>
+                    <td class="col-actions">
+                        <button class="snap-btn snap-btn-warning" onclick="showToast('Converting Backups to subvolume...', 'warning')" title="Convert to Subvolume"><i class="fa fa-exchange"></i></button>
+                        <button class="snap-btn snap-btn-success disabled" title="Create Snapshot (requires subvolume)"><i class="fa fa-camera"></i></button>
+                        <a class="snap-btn" href="#" title="Configure"><i class="fa fa-cog"></i></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>appdata</strong></td>
+                    <td>
+                        <span class="snap-disk-tag btrfs-yes">cache</span>
+                    </td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td><span class="badge-ok">Yes</span></td>
+                    <td>32</td>
+                    <td>2026-03-09 14:00:00 UTC</td>
+                    <td class="col-actions">
+                        <button class="snap-btn snap-btn-success" title="Create Snapshot"><i class="fa fa-camera"></i></button>
+                        <button class="snap-btn snap-btn-primary" onclick="showModal('appdata')" title="View Snapshots"><i class="fa fa-list"></i></button>
+                        <a class="snap-btn" href="#" title="Configure"><i class="fa fa-cog"></i></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>isos</strong></td>
+                    <td>
+                        <span class="snap-disk-tag btrfs-no">disk5 (XFS)</span>
+                    </td>
+                    <td><span class="badge-error">No</span></td>
+                    <td><span style="color:#888">N/A</span></td>
+                    <td>—</td>
+                    <td><span style="color:#888">Not supported</span></td>
+                    <td class="col-actions">
+                        <span style="color:#666; font-size:0.85em">XFS — snapshots not available</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
+
+<!-- ═══════════════════ SETTINGS TAB ═══════════════════ -->
+<div class="tab-content" id="tab-settings">
+<div class="page-content">
+    <div class="snap-section-header">
+        <h2><i class="fa fa-cog"></i> Global Settings</h2>
+        <div class="snap-toolbar">
+            <a class="snap-btn" href="#" onclick="showTab('dashboard')"><i class="fa fa-arrow-left"></i> Back to Dashboard</a>
+        </div>
+    </div>
+
+    <div class="snap-settings-form">
+        <dl>
+            <dt><i class="fa fa-power-off"></i> Enable Plugin:</dt>
+            <dd>
+                <select><option selected>Yes</option><option>No</option></select>
+                <div class="snap-help">Enable or disable all BTRFS snapshot operations.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-clock-o"></i> Default Snapshot Schedule:</dt>
+            <dd>
+                <select>
+                    <option>Disabled</option>
+                    <option>Every 15 Minutes</option>
+                    <option selected>Hourly</option>
+                    <option>Every 6 Hours</option>
+                    <option>Daily</option>
+                    <option>Weekly</option>
+                </select>
+                <div class="snap-help">Default schedule applied to all shares unless overridden per-share.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-history"></i> Default Retention Policy:</dt>
+            <dd>
+                <div class="snap-retention-grid">
+                    <div><label>Hours</label><input type="number" value="24"></div>
+                    <div><label>Days</label><input type="number" value="7"></div>
+                    <div><label>Weeks</label><input type="number" value="4"></div>
+                    <div><label>Months</label><input type="number" value="6"></div>
+                </div>
+                <div class="snap-help">Number of snapshots to keep at each granularity. Set to 0 to disable a tier.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-tag"></i> Snapshot Name Format:</dt>
+            <dd>
+                <input type="text" value="@GMT-%Y.%m.%d-%H.%M.%S" size="40">
+                <div class="snap-help"><code>strftime</code> format string. Default is compatible with Windows Previous Versions.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-globe"></i> Use UTC Timestamps:</dt>
+            <dd>
+                <select><option selected>Yes (recommended for SMB shadow_copy2)</option><option>No (use local time)</option></select>
+                <div class="snap-help">UTC is required for Windows Previous Versions compatibility.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-exchange"></i> Auto-Convert to Subvolumes:</dt>
+            <dd>
+                <select><option selected>No (manual only)</option><option>Yes (convert automatically)</option></select>
+                <div class="snap-help">When enabled, shares on BTRFS not configured as subvolumes will be automatically converted.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-eye-slash"></i> Hide Snapshot Directory:</dt>
+            <dd>
+                <select><option>No (visible to users)</option><option selected>Yes (hidden from SMB/NFS)</option></select>
+                <div class="snap-help">Hides .snapshots from network listings. Snapshots remain accessible via Windows Previous Versions.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt>&nbsp;</dt>
+            <dd>
+                <button class="snap-btn snap-btn-primary" style="padding:8px 24px;font-size:1em" onclick="showToast('Settings saved and applied', 'success')">Apply</button>
+                <button class="snap-btn" style="padding:8px 24px;font-size:1em" onclick="showTab('dashboard')">Done</button>
+            </dd>
+        </dl>
+    </div>
+</div>
+</div>
+
+<!-- ═══════════════════ PER-SHARE TAB ═══════════════════ -->
+<div class="tab-content" id="tab-share">
+<div class="page-content">
+    <div class="snap-section-header">
+        <h2><i class="fa fa-folder"></i> Share: Documents</h2>
+        <div class="snap-toolbar">
+            <a class="snap-btn" href="#" onclick="showTab('dashboard')"><i class="fa fa-arrow-left"></i> Back to Dashboard</a>
+        </div>
+    </div>
+
+    <!-- Disk Status -->
+    <div style="margin-bottom:16px">
+        <span class="snap-disk-tag btrfs-yes"><i class="fa fa-check"></i> disk1 — BTRFS, Subvolume</span>
+        <span class="snap-disk-tag btrfs-yes"><i class="fa fa-check"></i> cache — BTRFS, Subvolume</span>
+    </div>
+
+    <div class="snap-settings-form">
+        <dl>
+            <dt><i class="fa fa-power-off"></i> Enable Snapshots:</dt>
+            <dd><select><option selected>Yes</option><option>No</option></select></dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-clock-o"></i> Schedule:</dt>
+            <dd>
+                <select>
+                    <option selected>Use Global Default (Hourly)</option>
+                    <option>Disabled</option>
+                    <option>Every 15 Minutes</option>
+                    <option>Hourly</option>
+                    <option>Every 6 Hours</option>
+                    <option>Daily</option>
+                    <option>Weekly</option>
+                </select>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-history"></i> Retention Override:</dt>
+            <dd>
+                <div class="snap-retention-grid">
+                    <div><label>Hours</label><input type="number" value="" placeholder="24"></div>
+                    <div><label>Days</label><input type="number" value="" placeholder="7"></div>
+                    <div><label>Weeks</label><input type="number" value="" placeholder="4"></div>
+                    <div><label>Months</label><input type="number" value="" placeholder="6"></div>
+                </div>
+                <div class="snap-help">Leave blank to use global defaults.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt><i class="fa fa-windows"></i> Windows Previous Versions:</dt>
+            <dd>
+                <select><option selected>Yes (enable SMB shadow_copy2)</option><option>No</option></select>
+                <div class="snap-help">Enables right-click &rarr; Previous Versions in Windows Explorer.</div>
+            </dd>
+        </dl>
+        <dl>
+            <dt>&nbsp;</dt>
+            <dd>
+                <button class="snap-btn snap-btn-primary" style="padding:8px 24px;font-size:1em" onclick="showToast('Documents share config saved', 'success')">Save</button>
+            </dd>
+        </dl>
+    </div>
+
+    <!-- Snapshot History -->
+    <div class="snap-section-header" style="margin-top:24px">
+        <h2><i class="fa fa-history"></i> Snapshot History</h2>
+        <div class="snap-toolbar">
+            <button class="snap-btn snap-btn-success" onclick="showToast('Snapshot created for Documents', 'success')"><i class="fa fa-camera"></i> Create Snapshot Now</button>
+        </div>
+    </div>
+    <table class="snap-table">
+        <thead>
+            <tr><th>Snapshot Name</th><th>Disk</th><th>Created</th><th>Size</th><th style="text-align:right">Actions</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>@GMT-2026.03.09-14.00.00</td><td><span class="snap-disk-tag btrfs-yes">disk1</span></td><td>2026-03-09 14:00 UTC</td><td>2.1 MB</td><td class="col-actions"><button class="snap-btn snap-btn-danger" onclick="showToast('Snapshot deleted', 'error')"><i class="fa fa-trash"></i></button></td></tr>
+            <tr><td>@GMT-2026.03.09-14.00.00</td><td><span class="snap-disk-tag btrfs-yes">cache</span></td><td>2026-03-09 14:00 UTC</td><td>512 KB</td><td class="col-actions"><button class="snap-btn snap-btn-danger"><i class="fa fa-trash"></i></button></td></tr>
+            <tr><td>@GMT-2026.03.09-13.00.00</td><td><span class="snap-disk-tag btrfs-yes">disk1</span></td><td>2026-03-09 13:00 UTC</td><td>1.8 MB</td><td class="col-actions"><button class="snap-btn snap-btn-danger"><i class="fa fa-trash"></i></button></td></tr>
+            <tr><td>@GMT-2026.03.09-13.00.00</td><td><span class="snap-disk-tag btrfs-yes">cache</span></td><td>2026-03-09 13:00 UTC</td><td>256 KB</td><td class="col-actions"><button class="snap-btn snap-btn-danger"><i class="fa fa-trash"></i></button></td></tr>
+            <tr><td>@GMT-2026.03.09-12.00.00</td><td><span class="snap-disk-tag btrfs-yes">disk1</span></td><td>2026-03-09 12:00 UTC</td><td>3.4 MB</td><td class="col-actions"><button class="snap-btn snap-btn-danger"><i class="fa fa-trash"></i></button></td></tr>
+            <tr><td>@GMT-2026.03.08-02.00.00</td><td><span class="snap-disk-tag btrfs-yes">disk1</span></td><td>2026-03-08 02:00 UTC</td><td>8.7 MB</td><td class="col-actions"><button class="snap-btn snap-btn-danger"><i class="fa fa-trash"></i></button></td></tr>
+        </tbody>
+    </table>
+</div>
+</div>
+
+<!-- ═══════════════════ SNAPSHOT MODAL ═══════════════════ -->
+<div class="snap-modal-overlay" id="snapshot-modal">
+    <div class="snap-modal">
+        <div class="snap-modal-header">
+            <h3><i class="fa fa-list"></i> Snapshots — <span id="modal-share-name">Documents</span></h3>
+            <button class="snap-modal-close" onclick="hideModal()">&times;</button>
+        </div>
+        <div class="snap-modal-body">
+            <table class="snap-table">
+                <thead><tr><th>Name</th><th>Disk</th><th>Created</th><th>Size</th><th style="text-align:right">Delete</th></tr></thead>
+                <tbody id="modal-snapshots"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" style="position:fixed;top:20px;right:20px;z-index:10000;min-width:280px;max-width:420px;padding:14px 18px;border-radius:4px;color:#fff;font-size:0.9em;box-shadow:0 4px 16px rgba(0,0,0,0.4);opacity:0;transform:translateY(-10px);transition:all 0.3s;pointer-events:none;"></div>
+
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.unraid-submenu a').forEach(a => a.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    document.getElementById('nav-' + name).classList.add('active');
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    const colors = { success: '#2e7d32', error: '#c62828', warning: '#e65100', info: '#1565c0' };
+    const borders = { success: '#4caf50', error: '#f44336', warning: '#ff9800', info: '#2196f3' };
+    t.style.background = colors[type] || colors.info;
+    t.style.borderLeft = '4px solid ' + (borders[type] || borders.info);
+    t.textContent = msg;
+    t.style.opacity = '1';
+    t.style.transform = 'translateY(0)';
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(-10px)'; }, 3000);
+}
+
+const mockSnapshots = {
+    Documents: [
+        { name: '@GMT-2026.03.09-14.00.00', disk: 'disk1', date: '2026-03-09 14:00 UTC', size: '2.1 MB' },
+        { name: '@GMT-2026.03.09-14.00.00', disk: 'cache', date: '2026-03-09 14:00 UTC', size: '512 KB' },
+        { name: '@GMT-2026.03.09-13.00.00', disk: 'disk1', date: '2026-03-09 13:00 UTC', size: '1.8 MB' },
+        { name: '@GMT-2026.03.09-12.00.00', disk: 'disk1', date: '2026-03-09 12:00 UTC', size: '3.4 MB' },
+    ],
+    Photos: [
+        { name: '@GMT-2026.03.09-14.00.00', disk: 'disk2', date: '2026-03-09 14:00 UTC', size: '15.2 MB' },
+        { name: '@GMT-2026.03.09-14.00.00', disk: 'disk3', date: '2026-03-09 14:00 UTC', size: '8.9 MB' },
+        { name: '@GMT-2026.03.09-13.00.00', disk: 'disk2', date: '2026-03-09 13:00 UTC', size: '12.1 MB' },
+    ],
+    Media: [
+        { name: '@GMT-2026.03.09-14.00.00', disk: 'disk1', date: '2026-03-09 14:00 UTC', size: '45.3 MB' },
+        { name: '@GMT-2026.03.09-02.00.00', disk: 'disk2', date: '2026-03-09 02:00 UTC', size: '38.7 MB' },
+    ],
+    appdata: [
+        { name: '@GMT-2026.03.09-14.00.00', disk: 'cache', date: '2026-03-09 14:00 UTC', size: '4.2 MB' },
+        { name: '@GMT-2026.03.09-13.00.00', disk: 'cache', date: '2026-03-09 13:00 UTC', size: '3.8 MB' },
+    ],
+};
+
+function showModal(share) {
+    document.getElementById('modal-share-name').textContent = share;
+    const tbody = document.getElementById('modal-snapshots');
+    const snaps = mockSnapshots[share] || [];
+    tbody.innerHTML = snaps.map(s =>
+        '<tr><td>' + s.name + '</td><td><span class="snap-disk-tag btrfs-yes">' + s.disk + '</span></td><td>' + s.date + '</td><td>' + s.size + '</td><td class="col-actions"><button class="snap-btn snap-btn-danger" onclick="showToast(\'Snapshot deleted\',\'error\')"><i class="fa fa-trash"></i></button></td></tr>'
+    ).join('');
+    document.getElementById('snapshot-modal').classList.add('visible');
+}
+
+function hideModal() {
+    document.getElementById('snapshot-modal').classList.remove('visible');
+}
+
+document.getElementById('snapshot-modal').addEventListener('click', function(e) {
+    if (e.target === this) hideModal();
+});
+</script>
+
+</body>
+</html>

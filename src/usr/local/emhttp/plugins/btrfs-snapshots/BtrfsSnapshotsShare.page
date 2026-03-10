@@ -1,0 +1,245 @@
+Menu="Utilities"
+Title="BTRFS Snapshots Share Config"
+Icon="fa-folder-o"
+Tag="folder-o"
+---
+<?php
+/* BTRFS Snapshots - Per-Share Configuration Page
+ *
+ * Configures snapshot settings for an individual share.
+ * Receives share name via query string: ?share=ShareName
+ * Also displays snapshot history for the share with delete capability.
+ */
+
+$plugin = 'btrfs-snapshots';
+$docroot = $docroot ?? $_SERVER['DOCUMENT_ROOT'] ?: '/usr/local/emhttp';
+require_once "{$docroot}/plugins/{$plugin}/php/helpers.php";
+
+// Get share name from query string
+$share_raw = $_GET['share'] ?? '';
+$share = sanitize_share_name($share_raw);
+
+if ($share === '') {
+    echo '<div class="snap-warning-box"><i class="fa fa-exclamation-triangle"></i> No share specified. <a href="/Utilities/BtrfsSnapshots">Return to Dashboard</a></div>';
+    return;
+}
+
+$cfg = get_plugin_config();
+$share_cfg = get_share_config($share);
+$disks = get_share_disks($share);
+
+// Check BTRFS/subvolume status
+$btrfs_status = [];
+foreach ($disks as $disk) {
+    $path = $disk . '/' . $share;
+    $btrfs_status[] = [
+        'disk'      => basename($disk),
+        'is_btrfs'  => is_btrfs_disk($disk),
+        'is_subvol' => is_btrfs_subvolume($path),
+    ];
+}
+?>
+
+<link rel="stylesheet" type="text/css" href="/plugins/<?=$plugin?>/css/btrfs-snapshots.css">
+<script src="/plugins/<?=$plugin?>/js/btrfs-snapshots.js"></script>
+
+<!-- Header -->
+<div class="snap-section-header">
+    <h2><i class="fa fa-folder-open"></i> Share: <?= htmlspecialchars($share) ?></h2>
+    <div class="snap-toolbar">
+        <button class="snap-btn snap-btn-success" onclick="BtrfsSnapshots.createSnapshot('<?= htmlspecialchars($share, ENT_QUOTES) ?>')">
+            <i class="fa fa-camera"></i> Create Snapshot Now
+        </button>
+        <a class="snap-btn" href="/Utilities/BtrfsSnapshots">
+            <i class="fa fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Disk Status -->
+<?php if (!empty($btrfs_status)): ?>
+<div class="snap-info-box">
+    <i class="fa fa-hdd-o"></i> <strong>Disk Status:</strong>
+    <?php foreach ($btrfs_status as $ds): ?>
+        <span class="snap-disk-tag <?= $ds['is_btrfs'] ? 'btrfs-yes' : 'btrfs-no' ?>">
+            <?= htmlspecialchars($ds['disk']) ?>
+            <?php if ($ds['is_btrfs']): ?>
+                (BTRFS<?= $ds['is_subvol'] ? ', Subvolume' : ', NOT Subvolume' ?>)
+            <?php else: ?>
+                (Not BTRFS)
+            <?php endif; ?>
+        </span>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<?php
+// Warn if no BTRFS disks
+$has_btrfs = false;
+foreach ($btrfs_status as $ds) {
+    if ($ds['is_btrfs']) { $has_btrfs = true; break; }
+}
+if (!$has_btrfs): ?>
+<div class="snap-warning-box">
+    <i class="fa fa-exclamation-triangle"></i>
+    This share does not reside on any BTRFS-formatted disks. Snapshots are only available on BTRFS filesystems.
+</div>
+<?php endif; ?>
+
+<!-- Per-Share Settings Form -->
+<div class="snap-section-header" style="margin-top:24px;">
+    <h2><i class="fa fa-cog"></i> Share Settings</h2>
+</div>
+
+<div class="snap-settings-form" id="share-config-form">
+
+    <!-- Enable Snapshots -->
+    <dl>
+        <dt>Enable Snapshots:</dt>
+        <dd>
+            <select id="share_ENABLED" size="1">
+                <?= mk_option($share_cfg['ENABLED'], 'yes', 'Yes') ?>
+                <?= mk_option($share_cfg['ENABLED'], 'no', 'No') ?>
+            </select>
+            <div class="snap-help">Enable or disable snapshots for this specific share.</div>
+        </dd>
+    </dl>
+
+    <!-- Schedule Override -->
+    <dl>
+        <dt>Schedule:</dt>
+        <dd>
+            <select id="share_SCHEDULE" size="1">
+                <option value="global" <?= $share_cfg['SCHEDULE'] === 'global' ? 'selected' : '' ?>>
+                    Use Global Default (<?= htmlspecialchars(BTRFS_SNAP_SCHEDULES[$cfg['DEFAULT_SCHEDULE']] ?? $cfg['DEFAULT_SCHEDULE']) ?>)
+                </option>
+                <?php foreach (BTRFS_SNAP_SCHEDULES as $val => $label): ?>
+                <?= mk_option($share_cfg['SCHEDULE'], $val, $label) ?>
+                <?php endforeach; ?>
+            </select>
+            <div class="snap-help">Override the global schedule for this share, or use "Global Default".</div>
+        </dd>
+    </dl>
+
+    <!-- Retention Override -->
+    <dl>
+        <dt>Retention Override:</dt>
+        <dd>
+            <div class="snap-retention-grid">
+                <div>
+                    <label for="share_RETENTION_HOURS">Hours</label>
+                    <input type="number" id="share_RETENTION_HOURS"
+                           value="<?= htmlspecialchars($share_cfg['RETENTION_HOURS']) ?>"
+                           min="0" max="168" class="narrow"
+                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_HOURS']) ?>">
+                </div>
+                <div>
+                    <label for="share_RETENTION_DAYS">Days</label>
+                    <input type="number" id="share_RETENTION_DAYS"
+                           value="<?= htmlspecialchars($share_cfg['RETENTION_DAYS']) ?>"
+                           min="0" max="365" class="narrow"
+                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_DAYS']) ?>">
+                </div>
+                <div>
+                    <label for="share_RETENTION_WEEKS">Weeks</label>
+                    <input type="number" id="share_RETENTION_WEEKS"
+                           value="<?= htmlspecialchars($share_cfg['RETENTION_WEEKS']) ?>"
+                           min="0" max="52" class="narrow"
+                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_WEEKS']) ?>">
+                </div>
+                <div>
+                    <label for="share_RETENTION_MONTHS">Months</label>
+                    <input type="number" id="share_RETENTION_MONTHS"
+                           value="<?= htmlspecialchars($share_cfg['RETENTION_MONTHS']) ?>"
+                           min="0" max="120" class="narrow"
+                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_MONTHS']) ?>">
+                </div>
+            </div>
+            <div class="snap-help">Leave blank to use global defaults. Set values to override per-share.</div>
+        </dd>
+    </dl>
+
+    <!-- Snapshot Directory -->
+    <dl>
+        <dt>Snapshot Directory Name:</dt>
+        <dd>
+            <input type="text" id="share_SNAPDIR"
+                   value="<?= htmlspecialchars($share_cfg['SNAPDIR']) ?>"
+                   size="30" placeholder=".snapshots">
+            <div class="snap-help">Directory name within the share where snapshots are stored. Default: <code>.snapshots</code></div>
+        </dd>
+    </dl>
+
+    <!-- SMB Shadow Copy / Windows Previous Versions -->
+    <dl>
+        <dt><i class="fa fa-windows"></i> Windows Previous Versions:</dt>
+        <dd>
+            <select id="share_SMB_SHADOW_COPY" size="1">
+                <?= mk_option($share_cfg['SMB_SHADOW_COPY'], 'no', 'Disabled') ?>
+                <?= mk_option($share_cfg['SMB_SHADOW_COPY'], 'yes', 'Enabled (SMB shadow_copy2)') ?>
+            </select>
+            <div class="snap-help">
+                Enables the <code>vfs_shadow_copy2</code> SMB module so Windows clients can access
+                snapshots via "Previous Versions" in file properties. Requires @GMT snapshot naming format and UTC timestamps.
+            </div>
+        </dd>
+    </dl>
+
+    <!-- Save Button -->
+    <dl>
+        <dt>&nbsp;</dt>
+        <dd>
+            <button type="button" class="snap-btn snap-btn-primary" style="padding:8px 24px;font-size:1em;"
+                    onclick="BtrfsSnapshots.saveShareConfig('<?= htmlspecialchars($share, ENT_QUOTES) ?>')">
+                <i class="fa fa-save"></i> Save Settings
+            </button>
+            <a class="snap-btn" href="/Utilities/BtrfsSnapshots" style="padding:8px 24px;font-size:1em;">
+                Cancel
+            </a>
+        </dd>
+    </dl>
+
+</div>
+
+<!-- Snapshot History -->
+<div class="snap-section-header" style="margin-top:32px;">
+    <h2><i class="fa fa-camera-retro"></i> Snapshot History</h2>
+    <div class="snap-toolbar">
+        <button class="snap-btn" onclick="BtrfsSnapshots.loadShareSnapshots('<?= htmlspecialchars($share, ENT_QUOTES) ?>')">
+            <i class="fa fa-refresh"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<div class="snap-table-wrap">
+    <table class="tablesorter snap-table">
+        <thead>
+            <tr>
+                <th>Snapshot Name</th>
+                <th>Disk</th>
+                <th>Created</th>
+                <th>Size</th>
+                <th style="text-align:right">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="snap-share-snapshots-tbody">
+            <tr>
+                <td colspan="5" class="snap-loading">
+                    <span class="snap-spinner"></span> Loading snapshots...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+$(function () {
+    var csrf = <?= json_encode($var['csrf_token'] ?? '') ?>;
+    var share = '<?= htmlspecialchars($share, ENT_QUOTES) ?>';
+    BtrfsSnapshots.init(csrf);
+    BtrfsSnapshots.loadShareSnapshots(share);
+
+    // No auto-refresh on config page to avoid overwriting user input
+    BtrfsSnapshots.stopAutoRefresh();
+});
+</script>

@@ -1,0 +1,527 @@
+/* ─── BTRFS Snapshots Plugin - Styles ─────────────────────────────────── */
+/* Designed to complement Unraid's Dynamix dark theme (6.12+ / 7.x)       */
+
+/* ─── Variables ───────────────────────────────────────────────────────── */
+:root {
+    --snap-green:    #4caf50;
+    --snap-amber:    #ff9800;
+    --snap-red:      #f44336;
+    --snap-blue:     #2196f3;
+    --snap-bg-card:  rgba(255, 255, 255, 0.04);
+    --snap-border:   rgba(255, 255, 255, 0.08);
+    --snap-text:     #ccc;
+    --snap-text-dim: #888;
+    --snap-radius:   4px;
+}
+
+/* ─── Status Badges ───────────────────────────────────────────────────── */
+.badge-ok,
+.badge-warning,
+.badge-error,
+.badge-info {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.6;
+    vertical-align: middle;
+}
+
+.badge-ok {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--snap-green);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.badge-warning {
+    background: rgba(255, 152, 0, 0.15);
+    color: var(--snap-amber);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.badge-error {
+    background: rgba(244, 67, 54, 0.15);
+    color: var(--snap-red);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.badge-info {
+    background: rgba(33, 150, 243, 0.15);
+    color: var(--snap-blue);
+    border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+/* ─── Status Overview Cards ───────────────────────────────────────────── */
+.snap-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.snap-status-card {
+    background: var(--snap-bg-card);
+    border: 1px solid var(--snap-border);
+    border-radius: var(--snap-radius);
+    padding: 16px;
+    text-align: center;
+}
+
+.snap-status-card .stat-value {
+    font-size: 2em;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.snap-status-card .stat-label {
+    font-size: 0.85em;
+    color: var(--snap-text-dim);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.snap-status-card.status-enabled .stat-value {
+    color: var(--snap-green);
+}
+
+.snap-status-card.status-disabled .stat-value {
+    color: var(--snap-red);
+}
+
+/* ─── Share Table ─────────────────────────────────────────────────────── */
+.snap-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 20px;
+}
+
+table.snap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+table.snap-table thead th {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--snap-border);
+    color: var(--snap-text-dim);
+    font-weight: 600;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+table.snap-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--snap-border);
+    color: var(--snap-text);
+    vertical-align: middle;
+}
+
+table.snap-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+table.snap-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+table.snap-table .col-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* ─── Action Buttons ──────────────────────────────────────────────────── */
+.snap-btn {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--snap-radius);
+    border: 1px solid var(--snap-border);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--snap-text);
+    cursor: pointer;
+    font-size: 0.85em;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+    margin-left: 4px;
+    line-height: 1.5;
+}
+
+.snap-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.snap-btn:first-child {
+    margin-left: 0;
+}
+
+.snap-btn i {
+    margin-right: 4px;
+}
+
+.snap-btn-primary {
+    background: rgba(33, 150, 243, 0.15);
+    border-color: rgba(33, 150, 243, 0.3);
+    color: var(--snap-blue);
+}
+
+.snap-btn-primary:hover {
+    background: rgba(33, 150, 243, 0.25);
+    border-color: rgba(33, 150, 243, 0.5);
+    color: #64b5f6;
+}
+
+.snap-btn-success {
+    background: rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.3);
+    color: var(--snap-green);
+}
+
+.snap-btn-success:hover {
+    background: rgba(76, 175, 80, 0.25);
+    border-color: rgba(76, 175, 80, 0.5);
+    color: #81c784;
+}
+
+.snap-btn-danger {
+    background: rgba(244, 67, 54, 0.15);
+    border-color: rgba(244, 67, 54, 0.3);
+    color: var(--snap-red);
+}
+
+.snap-btn-danger:hover {
+    background: rgba(244, 67, 54, 0.25);
+    border-color: rgba(244, 67, 54, 0.5);
+    color: #e57373;
+}
+
+.snap-btn-warning {
+    background: rgba(255, 152, 0, 0.15);
+    border-color: rgba(255, 152, 0, 0.3);
+    color: var(--snap-amber);
+}
+
+.snap-btn-warning:hover {
+    background: rgba(255, 152, 0, 0.25);
+    border-color: rgba(255, 152, 0, 0.5);
+    color: #ffb74d;
+}
+
+.snap-btn:disabled,
+.snap-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* ─── Section Headers ─────────────────────────────────────────────────── */
+.snap-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--snap-border);
+}
+
+.snap-section-header h2 {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.snap-section-header .snap-toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+/* ─── Toast / Notification ────────────────────────────────────────────── */
+.snap-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    min-width: 280px;
+    max-width: 420px;
+    padding: 14px 18px;
+    border-radius: var(--snap-radius);
+    color: #fff;
+    font-size: 0.9em;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: auto;
+}
+
+.snap-toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.snap-toast.toast-success {
+    background: #2e7d32;
+    border-left: 4px solid var(--snap-green);
+}
+
+.snap-toast.toast-error {
+    background: #c62828;
+    border-left: 4px solid var(--snap-red);
+}
+
+.snap-toast.toast-warning {
+    background: #e65100;
+    border-left: 4px solid var(--snap-amber);
+}
+
+.snap-toast.toast-info {
+    background: #1565c0;
+    border-left: 4px solid var(--snap-blue);
+}
+
+/* ─── Snapshots Modal / Panel ─────────────────────────────────────────── */
+.snap-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.snap-modal {
+    background: #1a1a1a;
+    border: 1px solid var(--snap-border);
+    border-radius: 6px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.snap-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--snap-border);
+}
+
+.snap-modal-header h3 {
+    margin: 0;
+    font-size: 1.05em;
+}
+
+.snap-modal-close {
+    background: none;
+    border: none;
+    color: var(--snap-text-dim);
+    font-size: 1.3em;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.snap-modal-close:hover {
+    color: #fff;
+}
+
+.snap-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.snap-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--snap-border);
+    text-align: right;
+}
+
+/* ─── Progress / Loading ──────────────────────────────────────────────── */
+.snap-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--snap-text-dim);
+}
+
+.snap-loading i {
+    font-size: 1.8em;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.snap-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--snap-border);
+    border-top-color: var(--snap-blue);
+    border-radius: 50%;
+    animation: snap-spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+@keyframes snap-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ─── Empty State ─────────────────────────────────────────────────────── */
+.snap-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--snap-text-dim);
+}
+
+.snap-empty i {
+    font-size: 2.5em;
+    margin-bottom: 12px;
+    display: block;
+    opacity: 0.4;
+}
+
+.snap-empty p {
+    margin: 4px 0;
+}
+
+/* ─── Settings Form ───────────────────────────────────────────────────── */
+.snap-settings-form dl {
+    margin: 0;
+}
+
+.snap-settings-form dt {
+    padding: 10px 0 4px 0;
+    font-weight: 600;
+    color: var(--snap-text);
+}
+
+.snap-settings-form dd {
+    padding: 0 0 10px 0;
+    margin: 0;
+}
+
+.snap-settings-form dd select,
+.snap-settings-form dd input[type="text"],
+.snap-settings-form dd input[type="number"] {
+    min-width: 200px;
+}
+
+.snap-retention-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    max-width: 500px;
+}
+
+.snap-retention-grid label {
+    font-size: 0.85em;
+    color: var(--snap-text-dim);
+    display: block;
+    margin-bottom: 3px;
+}
+
+.snap-retention-grid input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* ─── Info / Help Text ────────────────────────────────────────────────── */
+.snap-help {
+    font-size: 0.82em;
+    color: var(--snap-text-dim);
+    margin-top: 3px;
+    font-style: italic;
+}
+
+.snap-info-box {
+    background: rgba(33, 150, 243, 0.08);
+    border: 1px solid rgba(33, 150, 243, 0.2);
+    border-radius: var(--snap-radius);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9em;
+    color: var(--snap-text);
+}
+
+.snap-info-box i {
+    color: var(--snap-blue);
+    margin-right: 6px;
+}
+
+.snap-warning-box {
+    background: rgba(255, 152, 0, 0.08);
+    border: 1px solid rgba(255, 152, 0, 0.2);
+    border-radius: var(--snap-radius);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9em;
+    color: var(--snap-text);
+}
+
+.snap-warning-box i {
+    color: var(--snap-amber);
+    margin-right: 6px;
+}
+
+/* ─── Disk Tag ────────────────────────────────────────────────────────── */
+.snap-disk-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--snap-border);
+    margin: 1px 2px;
+    white-space: nowrap;
+}
+
+.snap-disk-tag.btrfs-yes {
+    border-color: rgba(76, 175, 80, 0.3);
+    color: var(--snap-green);
+}
+
+.snap-disk-tag.btrfs-no {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--snap-text-dim);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .snap-status-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .snap-retention-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .snap-modal {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    table.snap-table {
+        font-size: 0.82em;
+    }
+
+    table.snap-table thead th,
+    table.snap-table tbody td {
+        padding: 8px 6px;
+    }
+}

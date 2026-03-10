@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# btrfs-snapshots event hook: stopping
+# Runs when the Unraid array is stopping.
+#
+# Responsibilities:
+#   1. Log shutdown
+#   2. Remove cron file (optional cleanup, it's on RAM disk anyway)
+#
+
+PLUGIN="btrfs-snapshots"
+PLUGDIR="/usr/local/emhttp/plugins/${PLUGIN}"
+CONFDIR="/boot/config/plugins/${PLUGIN}"
+LOGFILE="/var/log/${PLUGIN}/${PLUGIN}.log"
+
+mkdir -p /var/log/${PLUGIN}
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Array stopping — shutting down ${PLUGIN}." >> "$LOGFILE"
+
+# Remove cron file (RAM disk, will be gone on reboot anyway, but clean up)
+if [ -f "/etc/cron.d/${PLUGIN}" ]; then
+    rm -f "/etc/cron.d/${PLUGIN}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Cron jobs removed." >> "$LOGFILE"
+fi
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] ${PLUGIN} shutdown complete." >> "$LOGFILE"

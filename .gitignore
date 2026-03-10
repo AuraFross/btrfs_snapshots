@@ -1,0 +1,15 @@
+# Build artifacts
+build/
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Environment / credentials
+.env
+*.key
+*.pem

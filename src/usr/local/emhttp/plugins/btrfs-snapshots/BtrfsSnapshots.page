@@ -1,0 +1,90 @@
+Menu="Utilities"
+Title="BTRFS Snapshots"
+Icon="fa-camera-retro"
+Tag="camera-retro"
+---
+<?php
+/* BTRFS Snapshots - Main Dashboard
+ *
+ * Displays an overview of all user shares with BTRFS/subvolume status,
+ * snapshot counts, and action buttons. Data loaded via AJAX from the API.
+ */
+
+$plugin = 'btrfs-snapshots';
+$docroot = $docroot ?? $_SERVER['DOCUMENT_ROOT'] ?: '/usr/local/emhttp';
+require_once "{$docroot}/plugins/{$plugin}/php/helpers.php";
+
+$cfg = get_plugin_config();
+?>
+
+<link rel="stylesheet" type="text/css" href="/plugins/<?=$plugin?>/css/btrfs-snapshots.css">
+
+<!-- Status Overview Cards -->
+<div class="snap-status-grid">
+    <div class="snap-status-card <?= $cfg['ENABLED'] === 'yes' ? 'status-enabled' : 'status-disabled' ?>">
+        <div class="stat-value" id="snap-stat-enabled"><?= $cfg['ENABLED'] === 'yes' ? 'Enabled' : 'Disabled' ?></div>
+        <div class="stat-label">Plugin Status</div>
+    </div>
+    <div class="snap-status-card">
+        <div class="stat-value" id="snap-stat-shares">—</div>
+        <div class="stat-label">BTRFS Shares</div>
+    </div>
+    <div class="snap-status-card">
+        <div class="stat-value" id="snap-stat-snapshots">—</div>
+        <div class="stat-label">Total Snapshots</div>
+    </div>
+    <div class="snap-status-card">
+        <div class="stat-value" id="snap-stat-schedule"><?= htmlspecialchars(BTRFS_SNAP_SCHEDULES[$cfg['DEFAULT_SCHEDULE']] ?? $cfg['DEFAULT_SCHEDULE']) ?></div>
+        <div class="stat-label">Default Schedule</div>
+    </div>
+</div>
+
+<!-- Section Header -->
+<div class="snap-section-header">
+    <h2><i class="fa fa-folder-open"></i> Shares</h2>
+    <div class="snap-toolbar">
+        <button class="snap-btn snap-btn-primary" onclick="BtrfsSnapshots.loadShares()" title="Refresh">
+            <i class="fa fa-refresh"></i> Refresh
+        </button>
+        <a class="snap-btn" href="/Utilities/BtrfsSnapshotsSettings" title="Global Settings">
+            <i class="fa fa-cog"></i> Settings
+        </a>
+    </div>
+</div>
+
+<!-- Info box for non-subvolume notice -->
+<div class="snap-info-box">
+    <i class="fa fa-info-circle"></i>
+    Snapshots require BTRFS-formatted disks with shares as subvolumes. Shares on non-BTRFS disks or not configured as subvolumes will show conversion options.
+</div>
+
+<!-- Shares Table -->
+<div class="snap-table-wrap">
+    <table class="tablesorter snap-table">
+        <thead>
+            <tr>
+                <th>Share Name</th>
+                <th>Disk(s)</th>
+                <th>BTRFS</th>
+                <th>Subvolume</th>
+                <th>Snapshots</th>
+                <th>Last Snapshot</th>
+                <th style="text-align:right">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="snap-shares-tbody">
+            <tr>
+                <td colspan="7" class="snap-loading">
+                    <span class="snap-spinner"></span> Loading shares...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script src="/plugins/<?=$plugin?>/js/btrfs-snapshots.js"></script>
+<script>
+$(function () {
+    BtrfsSnapshots.init(<?= json_encode($var['csrf_token'] ?? '') ?>);
+});
+</script>

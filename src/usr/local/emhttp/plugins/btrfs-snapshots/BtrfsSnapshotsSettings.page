@@ -1,0 +1,174 @@
+Menu="Utilities"
+Title="BTRFS Snapshots Settings"
+Icon="fa-cog"
+Tag="cog"
+---
+<?php
+/* BTRFS Snapshots - Global Settings Page
+ *
+ * Configuration form for plugin-wide defaults. Saves to the plugin's
+ * .cfg file via Unraid's /update.php mechanism.
+ */
+
+$plugin = 'btrfs-snapshots';
+$docroot = $docroot ?? $_SERVER['DOCUMENT_ROOT'] ?: '/usr/local/emhttp';
+require_once "{$docroot}/plugins/{$plugin}/php/helpers.php";
+
+$cfg = get_plugin_config();
+?>
+
+<link rel="stylesheet" type="text/css" href="/plugins/<?=$plugin?>/css/btrfs-snapshots.css">
+
+<div class="snap-section-header">
+    <h2><i class="fa fa-cog"></i> Global Settings</h2>
+    <div class="snap-toolbar">
+        <a class="snap-btn" href="/Utilities/BtrfsSnapshots">
+            <i class="fa fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<form id="btrfs-snapshots-settings" method="POST" action="/update.php" target="progressFrame">
+    <input type="hidden" name="#file" value="<?=$plugin?>/<?=$plugin?>.cfg">
+    <input type="hidden" name="#command" value="/plugins/<?=$plugin?>/scripts/apply.sh">
+
+    <div class="snap-settings-form">
+
+        <!-- Enable/Disable Plugin -->
+        <dl>
+            <dt><i class="fa fa-power-off"></i> Enable Plugin:</dt>
+            <dd>
+                <select name="ENABLED" size="1">
+                    <?= mk_option($cfg['ENABLED'], 'yes', 'Yes') ?>
+                    <?= mk_option($cfg['ENABLED'], 'no', 'No') ?>
+                </select>
+                <div class="snap-help">Enable or disable all BTRFS snapshot operations.</div>
+            </dd>
+        </dl>
+
+        <!-- Default Schedule -->
+        <dl>
+            <dt><i class="fa fa-clock-o"></i> Default Snapshot Schedule:</dt>
+            <dd>
+                <select name="DEFAULT_SCHEDULE" size="1">
+                    <?php foreach (BTRFS_SNAP_SCHEDULES as $val => $label): ?>
+                    <?= mk_option($cfg['DEFAULT_SCHEDULE'], $val, $label) ?>
+                    <?php endforeach; ?>
+                </select>
+                <div class="snap-help">Default schedule applied to all shares unless overridden per-share.</div>
+            </dd>
+        </dl>
+
+        <!-- Default Retention -->
+        <dl>
+            <dt><i class="fa fa-history"></i> Default Retention Policy:</dt>
+            <dd>
+                <div class="snap-retention-grid">
+                    <div>
+                        <label for="DEFAULT_RETENTION_HOURS">Hours</label>
+                        <input type="number" name="DEFAULT_RETENTION_HOURS" id="DEFAULT_RETENTION_HOURS"
+                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_HOURS']) ?>"
+                               min="0" max="168" class="narrow">
+                    </div>
+                    <div>
+                        <label for="DEFAULT_RETENTION_DAYS">Days</label>
+                        <input type="number" name="DEFAULT_RETENTION_DAYS" id="DEFAULT_RETENTION_DAYS"
+                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_DAYS']) ?>"
+                               min="0" max="365" class="narrow">
+                    </div>
+                    <div>
+                        <label for="DEFAULT_RETENTION_WEEKS">Weeks</label>
+                        <input type="number" name="DEFAULT_RETENTION_WEEKS" id="DEFAULT_RETENTION_WEEKS"
+                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_WEEKS']) ?>"
+                               min="0" max="52" class="narrow">
+                    </div>
+                    <div>
+                        <label for="DEFAULT_RETENTION_MONTHS">Months</label>
+                        <input type="number" name="DEFAULT_RETENTION_MONTHS" id="DEFAULT_RETENTION_MONTHS"
+                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_MONTHS']) ?>"
+                               min="0" max="120" class="narrow">
+                    </div>
+                </div>
+                <div class="snap-help">
+                    Number of snapshots to keep at each granularity. Set to 0 to disable a tier.
+                    Example: 0 hours, 7 days, 4 weeks, 3 months = keep last 7 daily + 4 weekly + 3 monthly snapshots.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Snapshot Format -->
+        <dl>
+            <dt><i class="fa fa-tag"></i> Snapshot Name Format:</dt>
+            <dd>
+                <input type="text" name="SNAPSHOT_FORMAT" id="SNAPSHOT_FORMAT"
+                       value="<?= htmlspecialchars($cfg['SNAPSHOT_FORMAT']) ?>"
+                       size="40" placeholder="@GMT-%Y.%m.%d-%H.%M.%S">
+                <div class="snap-help">
+                    <code>strftime</code> format string for snapshot names.
+                    Default <code>@GMT-%Y.%m.%d-%H.%M.%S</code> is compatible with Windows Previous Versions (shadow_copy2).
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Use UTC -->
+        <dl>
+            <dt><i class="fa fa-globe"></i> Use UTC Timestamps:</dt>
+            <dd>
+                <select name="USE_UTC" size="1">
+                    <?= mk_option($cfg['USE_UTC'], 'yes', 'Yes (recommended for SMB shadow_copy2)') ?>
+                    <?= mk_option($cfg['USE_UTC'], 'no', 'No (use local time)') ?>
+                </select>
+                <div class="snap-help">
+                    UTC is required for Windows Previous Versions compatibility with the @GMT format.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Auto-Convert Subvolumes -->
+        <dl>
+            <dt><i class="fa fa-exchange"></i> Auto-Convert to Subvolumes:</dt>
+            <dd>
+                <select name="AUTO_CONVERT_SUBVOLUMES" size="1">
+                    <?= mk_option($cfg['AUTO_CONVERT_SUBVOLUMES'], 'no', 'No (manual only)') ?>
+                    <?= mk_option($cfg['AUTO_CONVERT_SUBVOLUMES'], 'yes', 'Yes (convert automatically)') ?>
+                </select>
+                <div class="snap-help">
+                    When enabled, shares on BTRFS disks that are not subvolumes will be automatically converted.
+                    This is a destructive operation — use with caution.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Hide Snapshot Directory -->
+        <dl>
+            <dt><i class="fa fa-eye-slash"></i> Hide Snapshot Directory:</dt>
+            <dd>
+                <select name="HIDE_SNAPDIR" size="1">
+                    <?= mk_option($cfg['HIDE_SNAPDIR'], 'no', 'No (visible to users)') ?>
+                    <?= mk_option($cfg['HIDE_SNAPDIR'], 'yes', 'Yes (hidden from SMB/NFS)') ?>
+                </select>
+                <div class="snap-help">
+                    When enabled, the .snapshots directory is hidden from network share listings via veto files.
+                    Snapshots remain accessible via Windows Previous Versions if SMB shadow_copy2 is enabled.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Submit -->
+        <dl>
+            <dt>&nbsp;</dt>
+            <dd>
+                <input type="submit" value="Apply" class="snap-btn snap-btn-primary" style="padding:8px 24px;font-size:1em;">
+                <button type="button" class="snap-btn" onclick="done()" style="padding:8px 24px;font-size:1em;">Done</button>
+            </dd>
+        </dl>
+
+    </div>
+</form>
+
+<script>
+function done() {
+    // Navigate back to dashboard
+    location.href = '/Utilities/BtrfsSnapshots';
+}
+</script>

@@ -1,0 +1,151 @@
+<?xml version='1.0' standalone='yes'?>
+
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "btrfs-snapshots">
+  <!ENTITY author    "AuraFross">
+  <!ENTITY version   "2026.03.09">
+  <!ENTITY gitURL    "https://github.com/AuraFross/btrfs_snapshots/releases/download/&version;">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/AuraFross/btrfs_snapshots/main/btrfs-snapshots.plg">
+  <!ENTITY pkgURL    "&gitURL;/&name;-&version;.txz">
+  <!ENTITY md5URL    "&gitURL;/&name;-&version;.md5">
+  <!ENTITY plugdir   "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY confdir   "/boot/config/plugins/&name;">
+]>
+
+<PLUGIN  name="&name;"
+         author="&author;"
+         version="&version;"
+         pluginURL="&pluginURL;"
+         min="6.9.2"
+         icon="fa-camera-retro"
+         support="https://github.com/AuraFross/btrfs_snapshots/issues">
+
+<CHANGES>
+###2026.03.09
+- Initial release
+- Automated BTRFS snapshot creation with configurable schedules
+- Windows Previous Versions support via Samba shadow_copy2
+- Per-share snapshot configuration
+- Configurable retention policies (hourly, daily, weekly, monthly)
+- Web UI for management integrated into Unraid Settings
+- Automatic Samba shadow_copy2 configuration
+- Event hooks for array start/stop and Samba restart
+</CHANGES>
+
+<!--
+============================================================================
+Pre-install: check for BTRFS support
+============================================================================
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+# Verify btrfs-progs is available
+if ! which btrfs &amp;>/dev/null; then
+  echo ""
+  echo "-----------------------------------------------------------"
+  echo " &name; requires btrfs-progs which is included with Unraid."
+  echo " If you see this error, your Unraid installation may be"
+  echo " incomplete. Please reinstall or update Unraid."
+  echo "-----------------------------------------------------------"
+  echo ""
+  exit 1
+fi
+
+echo "&name;: BTRFS support verified."
+
+# Backup smb-extra.conf before we touch it
+if [ -f "/boot/config/smb-extra.conf" ]; then
+  BACKUP="/boot/config/smb-extra.conf.pre-&name;.$(date '+%Y%m%d%H%M%S')"
+  cp "/boot/config/smb-extra.conf" "$BACKUP"
+  echo "&name;: Backed up smb-extra.conf to $BACKUP"
+else
+  echo "&name;: No existing smb-extra.conf found (nothing to back up)."
+fi
+</INLINE>
+</FILE>
+
+<!--
+============================================================================
+Download and install the plugin package
+============================================================================
+-->
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>&pkgURL;</URL>
+<MD5>&md5URL;</MD5>
+</FILE>
+
+<!--
+============================================================================
+Post-install setup
+============================================================================
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+# Create config directory on flash drive (persistent across reboots)
+mkdir -p &confdir;
+
+# Copy default config if none exists
+if [ ! -f "&confdir;/&name;.cfg" ]; then
+  cp "&plugdir;/default.cfg" "&confdir;/&name;.cfg"
+  echo "&name;: Default configuration installed."
+fi
+
+# Ensure scripts are executable
+chmod +x &plugdir;/scripts/* 2>/dev/null
+chmod +x &plugdir;/event/* 2>/dev/null
+
+# Create log directory
+mkdir -p /var/log/&name;
+
+# Run initial setup: apply samba config and create cron jobs
+if [ -x "&plugdir;/scripts/smb_configure.sh" ]; then
+  &plugdir;/scripts/smb_configure.sh 2>/dev/null
+fi
+
+if [ -x "&plugdir;/scripts/cron_update.sh" ]; then
+  &plugdir;/scripts/cron_update.sh 2>/dev/null
+fi
+
+echo "&name;: Installation complete."
+echo "&name;: Access Settings &gt; BTRFS Snapshots to configure."
+</INLINE>
+</FILE>
+
+<!--
+============================================================================
+Remove script
+============================================================================
+-->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+echo "&name;: Removing plugin..."
+
+# Remove cron jobs
+rm -f /etc/cron.d/&name; 2>/dev/null
+rm -f /var/run/&name;_cron 2>/dev/null
+
+# Remove Samba shadow_copy2 configuration markers from smb-extra.conf
+if [ -f "/boot/config/smb-extra.conf" ]; then
+  sed -i '/^# BEGIN &name;$/,/^# END &name;$/d' /boot/config/smb-extra.conf
+  echo "&name;: Cleaned Samba configuration from smb-extra.conf."
+fi
+
+# Remove the package
+removepkg &name;-&version; 2>/dev/null
+
+# Remove plugin directory (but NOT config — user may reinstall)
+rm -rf &plugdir;
+
+# Remove downloaded package from flash
+rm -f /boot/config/plugins/&name;/&name;-*.txz 2>/dev/null
+
+# Remove log directory
+rm -rf /var/log/&name; 2>/dev/null
+
+echo "&name;: Plugin removed."
+echo "&name;: Configuration preserved at &confdir;/&name;.cfg"
+echo "&name;: To fully remove, delete &confdir; manually."
+</INLINE>
+</FILE>
+
+</PLUGIN>

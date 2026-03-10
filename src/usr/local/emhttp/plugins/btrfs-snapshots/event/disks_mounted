@@ -1,0 +1,42 @@
+#!/bin/bash
+#
+# btrfs-snapshots event hook: disks_mounted
+# Runs after the Unraid array disks are mounted.
+#
+# Responsibilities:
+#   1. Re-apply Samba shadow_copy2 configuration
+#   2. Recreate cron jobs (lost on reboot since /etc/cron.d is on RAM disk)
+#   3. Log startup
+#
+
+PLUGIN="btrfs-snapshots"
+PLUGDIR="/usr/local/emhttp/plugins/${PLUGIN}"
+CONFDIR="/boot/config/plugins/${PLUGIN}"
+LOGFILE="/var/log/${PLUGIN}/${PLUGIN}.log"
+
+# Source config
+CONFIG="${CONFDIR}/${PLUGIN}.cfg"
+[ -f "$CONFIG" ] && source "$CONFIG"
+
+# Exit if plugin is disabled
+if [ "$ENABLED" != "yes" ]; then
+    exit 0
+fi
+
+mkdir -p /var/log/${PLUGIN}
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Array mounted — initializing ${PLUGIN}" >> "$LOGFILE"
+
+# Re-apply Samba shadow_copy2 configuration
+if [ -x "${PLUGDIR}/scripts/smb_configure.sh" ]; then
+    ${PLUGDIR}/scripts/smb_configure.sh >> "$LOGFILE" 2>&1
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Samba shadow_copy2 configuration applied." >> "$LOGFILE"
+fi
+
+# Recreate cron jobs (RAM disk is wiped on reboot)
+if [ -x "${PLUGDIR}/scripts/cron_update.sh" ]; then
+    ${PLUGDIR}/scripts/cron_update.sh >> "$LOGFILE" 2>&1
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Cron jobs installed." >> "$LOGFILE"
+fi
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] ${PLUGIN} startup complete." >> "$LOGFILE"

@@ -1,0 +1,19 @@
+# HOW TO EDIT THIS FILE:
+# The "handy ruler" below makes it easier to edit a package description.
+# Line up the first '|' above the ':' following the base package name, and
+# the '|' on the right side marks the last column you can put a character in.
+# You must make exactly 11 lines for the formatting to be correct.  It's also
+# customary to leave one space after the ':'.
+
+              |-----handy-ruler------------------------------------------------------|
+btrfs-snapshots: btrfs-snapshots (BTRFS Snapshot Manager for Unraid)
+btrfs-snapshots:
+btrfs-snapshots: Automated BTRFS snapshot creation and lifecycle management for
+btrfs-snapshots: Unraid servers. Provides scheduled snapshots with configurable
+btrfs-snapshots: retention policies and integrates with Windows Previous Versions
+btrfs-snapshots: via Samba shadow_copy2. Includes a web UI for per-share
+btrfs-snapshots: configuration, on-demand snapshot creation, and retention
+btrfs-snapshots: management.
+btrfs-snapshots:
+btrfs-snapshots: Homepage: https://github.com/AuraFross/btrfs_snapshots
+btrfs-snapshots:

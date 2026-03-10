@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# btrfs-snapshots event hook: svcs_restarted
+# Runs after Samba/NFS services are restarted.
+#
+# Responsibilities:
+#   1. Re-apply Samba shadow_copy2 configuration
+#      (Samba restarts can reload smb.conf, so we ensure our
+#       shadow_copy2 settings in smb-extra.conf are current)
+#
+
+PLUGIN="btrfs-snapshots"
+PLUGDIR="/usr/local/emhttp/plugins/${PLUGIN}"
+CONFDIR="/boot/config/plugins/${PLUGIN}"
+LOGFILE="/var/log/${PLUGIN}/${PLUGIN}.log"
+
+# Source config
+CONFIG="${CONFDIR}/${PLUGIN}.cfg"
+[ -f "$CONFIG" ] && source "$CONFIG"
+
+# Exit if plugin is disabled
+if [ "$ENABLED" != "yes" ]; then
+    exit 0
+fi
+
+mkdir -p /var/log/${PLUGIN}
+
+# Re-apply Samba shadow_copy2 configuration
+if [ -x "${PLUGDIR}/scripts/smb_configure.sh" ]; then
+    ${PLUGDIR}/scripts/smb_configure.sh >> "$LOGFILE" 2>&1
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Samba config re-applied after service restart." >> "$LOGFILE"
+fi
