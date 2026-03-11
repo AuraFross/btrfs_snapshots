@@ -245,10 +245,10 @@ main() {
 
     # Validate snapshot type
     case "${snap_type}" in
-        manual|scheduled|pre-update) ;;
+        manual|scheduled|pre-update|hourly|daily|weekly|monthly) ;;
         *)
             log "ERROR" "Invalid snapshot type: ${snap_type}"
-            echo "Error: Invalid snapshot type '${snap_type}'. Use: manual, scheduled, pre-update" >&2
+            echo "Error: Invalid snapshot type '${snap_type}'. Use: manual, scheduled, pre-update, daily, weekly, monthly" >&2
             exit 1
             ;;
     esac

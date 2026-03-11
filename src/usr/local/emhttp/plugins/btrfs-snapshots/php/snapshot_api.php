@@ -329,29 +329,52 @@ function action_save_share_config(): void {
         json_response(['error' => 'Share name is required'], 400);
     }
 
-    $config = [
-        'ENABLED'          => ($_POST['ENABLED'] ?? 'yes') === 'yes' ? 'yes' : 'no',
-        'SCHEDULE'         => $_POST['SCHEDULE'] ?? 'global',
-        'RETENTION_HOURS'  => intval($_POST['RETENTION_HOURS'] ?? 0),
-        'RETENTION_DAYS'   => intval($_POST['RETENTION_DAYS'] ?? 0),
-        'RETENTION_WEEKS'  => intval($_POST['RETENTION_WEEKS'] ?? 0),
-        'RETENTION_MONTHS' => intval($_POST['RETENTION_MONTHS'] ?? 0),
-        'SNAPDIR'          => preg_replace('/[^a-zA-Z0-9_\-\.]/', '', $_POST['SNAPDIR'] ?? '.snapshots'),
-        'SMB_SHADOW_COPY'  => ($_POST['SMB_SHADOW_COPY'] ?? 'no') === 'yes' ? 'yes' : 'no',
-    ];
+    $ir = function(string $key, int $min, int $max, int $default): string {
+        $v = intval($_POST[$key] ?? $default);
+        return (string) max($min, min($max, $v));
+    };
 
-    // Validate schedule value
-    $valid_schedules = array_keys(BTRFS_SNAP_SCHEDULES);
-    $valid_schedules[] = 'global';
-    if (!in_array($config['SCHEDULE'], $valid_schedules)) {
-        $config['SCHEDULE'] = 'global';
-    }
+    $config = [
+        'ENABLED'                  => ($_POST['ENABLED'] ?? 'yes') === 'yes' ? 'yes' : 'no',
+        'SNAPDIR'                  => preg_replace('/[^a-zA-Z0-9_\-\.]/', '', $_POST['SNAPDIR'] ?? '.snapshots') ?: '.snapshots',
+        'SMB_SHADOW_COPY'          => ($_POST['SMB_SHADOW_COPY'] ?? 'no') === 'yes' ? 'yes' : 'no',
+
+        'SCHEDULE_HOURLY_ENABLED'  => ($_POST['SCHEDULE_HOURLY_ENABLED']  ?? 'no') === 'yes' ? 'yes' : 'no',
+        'SCHEDULE_HOURLY_MINUTE'   => $ir('SCHEDULE_HOURLY_MINUTE',  0, 59,  0),
+        'SCHEDULE_HOURLY_RETAIN'   => $ir('SCHEDULE_HOURLY_RETAIN',  0, 168, 0),
+
+        'SCHEDULE_DAILY_ENABLED'   => ($_POST['SCHEDULE_DAILY_ENABLED']   ?? 'no') === 'yes' ? 'yes' : 'no',
+        'SCHEDULE_DAILY_HOUR'      => $ir('SCHEDULE_DAILY_HOUR',    0, 23,  0),
+        'SCHEDULE_DAILY_MINUTE'    => $ir('SCHEDULE_DAILY_MINUTE',  0, 59,  0),
+        'SCHEDULE_DAILY_RETAIN'    => $ir('SCHEDULE_DAILY_RETAIN',  0, 365, 2),
+
+        'SCHEDULE_WEEKLY_ENABLED'  => ($_POST['SCHEDULE_WEEKLY_ENABLED']  ?? 'no') === 'yes' ? 'yes' : 'no',
+        'SCHEDULE_WEEKLY_DAY'      => $ir('SCHEDULE_WEEKLY_DAY',    0,  6,  0),
+        'SCHEDULE_WEEKLY_HOUR'     => $ir('SCHEDULE_WEEKLY_HOUR',   0, 23,  2),
+        'SCHEDULE_WEEKLY_MINUTE'   => $ir('SCHEDULE_WEEKLY_MINUTE', 0, 59,  0),
+        'SCHEDULE_WEEKLY_RETAIN'   => $ir('SCHEDULE_WEEKLY_RETAIN', 0,  52, 1),
+
+        'SCHEDULE_MONTHLY_ENABLED' => ($_POST['SCHEDULE_MONTHLY_ENABLED'] ?? 'no') === 'yes' ? 'yes' : 'no',
+        'SCHEDULE_MONTHLY_DAY'     => $ir('SCHEDULE_MONTHLY_DAY',    1, 28,  1),
+        'SCHEDULE_MONTHLY_HOUR'    => $ir('SCHEDULE_MONTHLY_HOUR',   0, 23,  3),
+        'SCHEDULE_MONTHLY_MINUTE'  => $ir('SCHEDULE_MONTHLY_MINUTE', 0, 59,  0),
+        'SCHEDULE_MONTHLY_RETAIN'  => $ir('SCHEDULE_MONTHLY_RETAIN', 0, 120, 0),
+    ];
 
     if (!save_share_config($share, $config)) {
         json_response(['error' => 'Failed to save share configuration'], 500);
     }
 
     btrfs_snap_log("Saved config for share '{$share}'");
+
+    // Regenerate cron jobs so the new schedule takes effect immediately
+    $cron_script = BTRFS_SNAP_SCRIPTS . '/cron_update.sh';
+    if (file_exists($cron_script)) {
+        exec("bash " . escapeshellarg($cron_script) . " 2>&1", $cron_output, $cron_ret);
+        if ($cron_ret !== 0) {
+            btrfs_snap_log("cron_update.sh failed: " . implode("\n", $cron_output), 'WARN');
+        }
+    }
 
     // Re-run Samba configuration if shadow_copy2 setting may have changed
     $smb_script = BTRFS_SNAP_SCRIPTS . '/smb_configure.sh';

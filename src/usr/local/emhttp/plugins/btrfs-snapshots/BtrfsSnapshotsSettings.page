@@ -46,52 +46,150 @@ $cfg = get_plugin_config();
             </dd>
         </dl>
 
-        <!-- Default Schedule -->
+        <!-- Default Schedules -->
         <dl>
-            <dt><i class="fa fa-clock-o"></i> Default Snapshot Schedule:</dt>
+            <dt><i class="fa fa-clock-o"></i> Default Schedules:</dt>
             <dd>
-                <select name="DEFAULT_SCHEDULE" size="1">
-                    <?php foreach (BTRFS_SNAP_SCHEDULES as $val => $label): ?>
-                    <?= mk_option($cfg['DEFAULT_SCHEDULE'], $val, $label) ?>
-                    <?php endforeach; ?>
-                </select>
-                <div class="snap-help">Default schedule applied to all shares unless overridden per-share.</div>
+                <div class="snap-help" style="margin-bottom:12px;">
+                    These are the global defaults. Per-share settings can override or inherit these.
+                </div>
             </dd>
         </dl>
 
-        <!-- Default Retention -->
+        <!-- Hourly -->
         <dl>
-            <dt><i class="fa fa-history"></i> Default Retention Policy:</dt>
+            <dt>Hourly Snapshots:</dt>
             <dd>
-                <div class="snap-retention-grid">
-                    <div>
-                        <label for="DEFAULT_RETENTION_HOURS">Hours</label>
-                        <input type="number" name="DEFAULT_RETENTION_HOURS" id="DEFAULT_RETENTION_HOURS"
-                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_HOURS']) ?>"
-                               min="0" max="168" class="narrow">
-                    </div>
-                    <div>
-                        <label for="DEFAULT_RETENTION_DAYS">Days</label>
-                        <input type="number" name="DEFAULT_RETENTION_DAYS" id="DEFAULT_RETENTION_DAYS"
-                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_DAYS']) ?>"
-                               min="0" max="365" class="narrow">
-                    </div>
-                    <div>
-                        <label for="DEFAULT_RETENTION_WEEKS">Weeks</label>
-                        <input type="number" name="DEFAULT_RETENTION_WEEKS" id="DEFAULT_RETENTION_WEEKS"
-                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_WEEKS']) ?>"
-                               min="0" max="52" class="narrow">
-                    </div>
-                    <div>
-                        <label for="DEFAULT_RETENTION_MONTHS">Months</label>
-                        <input type="number" name="DEFAULT_RETENTION_MONTHS" id="DEFAULT_RETENTION_MONTHS"
-                               value="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_MONTHS']) ?>"
-                               min="0" max="120" class="narrow">
-                    </div>
+                <div class="snap-schedule-row">
+                    <select name="SCHEDULE_HOURLY_ENABLED" id="g_hourly_enabled" size="1">
+                        <?= mk_option($cfg['SCHEDULE_HOURLY_ENABLED'], 'no',  'Disabled') ?>
+                        <?= mk_option($cfg['SCHEDULE_HOURLY_ENABLED'], 'yes', 'Enabled') ?>
+                    </select>
+                    &nbsp; at minute &nbsp;
+                    <select name="SCHEDULE_HOURLY_MINUTE" id="g_hourly_minute" size="1">
+                        <?php foreach ([0,5,10,15,20,25,30,35,40,45,50,55] as $m): ?>
+                        <option value="<?=$m?>" <?= intval($cfg['SCHEDULE_HOURLY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d',$m) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    &nbsp;&nbsp; Keep &nbsp;
+                    <input type="number" name="SCHEDULE_HOURLY_RETAIN" id="g_hourly_retain"
+                           value="<?= htmlspecialchars($cfg['SCHEDULE_HOURLY_RETAIN']) ?>"
+                           min="0" max="168" class="narrow">
+                    &nbsp; snapshots
                 </div>
-                <div class="snap-help">
-                    Number of snapshots to keep at each granularity. Set to 0 to disable a tier.
-                    Example: 0 hours, 7 days, 4 weeks, 3 months = keep last 7 daily + 4 weekly + 3 monthly snapshots.
+                <div class="snap-warning-box snap-retain-warn" id="g_warn_hourly" style="display:none;margin-top:6px;">
+                    <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Daily -->
+        <dl>
+            <dt>Daily Snapshots:</dt>
+            <dd>
+                <div class="snap-schedule-row">
+                    <select name="SCHEDULE_DAILY_ENABLED" id="g_daily_enabled" size="1">
+                        <?= mk_option($cfg['SCHEDULE_DAILY_ENABLED'], 'no',  'Disabled') ?>
+                        <?= mk_option($cfg['SCHEDULE_DAILY_ENABLED'], 'yes', 'Enabled') ?>
+                    </select>
+                    &nbsp; at &nbsp;
+                    <select name="SCHEDULE_DAILY_HOUR" id="g_daily_hour" size="1">
+                        <?php for ($h=0;$h<24;$h++): ?>
+                        <option value="<?=$h?>" <?= intval($cfg['SCHEDULE_DAILY_HOUR']) === $h ? 'selected' : '' ?>><?= sprintf('%02d',$h) ?></option>
+                        <?php endfor; ?>
+                    </select>
+                    :
+                    <select name="SCHEDULE_DAILY_MINUTE" id="g_daily_minute" size="1">
+                        <?php foreach ([0,5,10,15,20,25,30,35,40,45,50,55] as $m): ?>
+                        <option value="<?=$m?>" <?= intval($cfg['SCHEDULE_DAILY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d',$m) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    &nbsp;&nbsp; Keep &nbsp;
+                    <input type="number" name="SCHEDULE_DAILY_RETAIN" id="g_daily_retain"
+                           value="<?= htmlspecialchars($cfg['SCHEDULE_DAILY_RETAIN']) ?>"
+                           min="0" max="365" class="narrow">
+                    &nbsp; snapshots
+                </div>
+                <div class="snap-warning-box snap-retain-warn" id="g_warn_daily" style="display:none;margin-top:6px;">
+                    <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Weekly -->
+        <dl>
+            <dt>Weekly Snapshots:</dt>
+            <dd>
+                <div class="snap-schedule-row">
+                    <select name="SCHEDULE_WEEKLY_ENABLED" id="g_weekly_enabled" size="1">
+                        <?= mk_option($cfg['SCHEDULE_WEEKLY_ENABLED'], 'no',  'Disabled') ?>
+                        <?= mk_option($cfg['SCHEDULE_WEEKLY_ENABLED'], 'yes', 'Enabled') ?>
+                    </select>
+                    &nbsp; every &nbsp;
+                    <select name="SCHEDULE_WEEKLY_DAY" id="g_weekly_day" size="1">
+                        <?php foreach (['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as $i => $d): ?>
+                        <option value="<?=$i?>" <?= intval($cfg['SCHEDULE_WEEKLY_DAY']) === $i ? 'selected' : '' ?>><?=$d?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    &nbsp; at &nbsp;
+                    <select name="SCHEDULE_WEEKLY_HOUR" id="g_weekly_hour" size="1">
+                        <?php for ($h=0;$h<24;$h++): ?>
+                        <option value="<?=$h?>" <?= intval($cfg['SCHEDULE_WEEKLY_HOUR']) === $h ? 'selected' : '' ?>><?= sprintf('%02d',$h) ?></option>
+                        <?php endfor; ?>
+                    </select>
+                    :
+                    <select name="SCHEDULE_WEEKLY_MINUTE" id="g_weekly_minute" size="1">
+                        <?php foreach ([0,5,10,15,20,25,30,35,40,45,50,55] as $m): ?>
+                        <option value="<?=$m?>" <?= intval($cfg['SCHEDULE_WEEKLY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d',$m) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    &nbsp;&nbsp; Keep &nbsp;
+                    <input type="number" name="SCHEDULE_WEEKLY_RETAIN" id="g_weekly_retain"
+                           value="<?= htmlspecialchars($cfg['SCHEDULE_WEEKLY_RETAIN']) ?>"
+                           min="0" max="52" class="narrow">
+                    &nbsp; snapshots
+                </div>
+                <div class="snap-warning-box snap-retain-warn" id="g_warn_weekly" style="display:none;margin-top:6px;">
+                    <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+                </div>
+            </dd>
+        </dl>
+
+        <!-- Monthly -->
+        <dl>
+            <dt>Monthly Snapshots:</dt>
+            <dd>
+                <div class="snap-schedule-row">
+                    <select name="SCHEDULE_MONTHLY_ENABLED" id="g_monthly_enabled" size="1">
+                        <?= mk_option($cfg['SCHEDULE_MONTHLY_ENABLED'], 'no',  'Disabled') ?>
+                        <?= mk_option($cfg['SCHEDULE_MONTHLY_ENABLED'], 'yes', 'Enabled') ?>
+                    </select>
+                    &nbsp; on the &nbsp;
+                    <select name="SCHEDULE_MONTHLY_DAY" id="g_monthly_day" size="1">
+                        <?php for ($d=1;$d<=28;$d++): ?>
+                        <option value="<?=$d?>" <?= intval($cfg['SCHEDULE_MONTHLY_DAY']) === $d ? 'selected' : '' ?>><?=$d?></option>
+                        <?php endfor; ?>
+                    </select>
+                    &nbsp; at &nbsp;
+                    <select name="SCHEDULE_MONTHLY_HOUR" id="g_monthly_hour" size="1">
+                        <?php for ($h=0;$h<24;$h++): ?>
+                        <option value="<?=$h?>" <?= intval($cfg['SCHEDULE_MONTHLY_HOUR']) === $h ? 'selected' : '' ?>><?= sprintf('%02d',$h) ?></option>
+                        <?php endfor; ?>
+                    </select>
+                    :
+                    <select name="SCHEDULE_MONTHLY_MINUTE" id="g_monthly_minute" size="1">
+                        <?php foreach ([0,5,10,15,20,25,30,35,40,45,50,55] as $m): ?>
+                        <option value="<?=$m?>" <?= intval($cfg['SCHEDULE_MONTHLY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d',$m) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    &nbsp;&nbsp; Keep &nbsp;
+                    <input type="number" name="SCHEDULE_MONTHLY_RETAIN" id="g_monthly_retain"
+                           value="<?= htmlspecialchars($cfg['SCHEDULE_MONTHLY_RETAIN']) ?>"
+                           min="0" max="120" class="narrow">
+                    &nbsp; snapshots
+                </div>
+                <div class="snap-warning-box snap-retain-warn" id="g_warn_monthly" style="display:none;margin-top:6px;">
+                    <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
                 </div>
             </dd>
         </dl>
@@ -166,9 +264,24 @@ $cfg = get_plugin_config();
     </div>
 </form>
 
+<script src="/plugins/<?=$plugin?>/js/btrfs-snapshots.js"></script>
 <script>
 function done() {
-    // Navigate back to dashboard
     location.href = '/Utilities/BtrfsSnapshots';
 }
+
+$(function () {
+    var types = ['hourly', 'daily', 'weekly', 'monthly'];
+    function checkGlobalWarnings() {
+        types.forEach(function (t) {
+            var enabled = $('#g_' + t + '_enabled').val() === 'yes';
+            var retain  = parseInt($('#g_' + t + '_retain').val(), 10);
+            $('#g_warn_' + t).toggle(enabled && (isNaN(retain) || retain === 0));
+        });
+    }
+    checkGlobalWarnings();
+    types.forEach(function (t) {
+        $('#g_' + t + '_enabled, #g_' + t + '_retain').on('change input', checkGlobalWarnings);
+    });
+});
 </script>

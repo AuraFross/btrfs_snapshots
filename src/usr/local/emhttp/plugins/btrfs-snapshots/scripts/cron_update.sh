@@ -5,16 +5,22 @@
 # Usage: cron_update.sh
 #
 # Reads all per-share configuration files and generates a cron file at
-# /etc/cron.d/btrfs-snapshots with appropriate entries. Each cron entry
-# runs snapshot_create.sh followed by snapshot_rotate.sh.
+# /etc/cron.d/btrfs-snapshots. Each share can have up to three independent
+# schedules (daily, weekly, monthly), each with a user-defined time and day.
 #
-# Supported schedules (per-share SCHEDULE= config key):
-#   every15min  - */15 * * * *
-#   hourly      - 0 * * * *
-#   every6hours - 0 */6 * * *
-#   daily       - 0 2 * * *     (2:00 AM)
-#   weekly      - 0 3 * * 0     (3:00 AM Sunday)
-#   disabled    - no cron entry
+# Per-share config keys read from /boot/config/plugins/btrfs-snapshots/shares/<name>.cfg:
+#   ENABLED="yes"
+#   SCHEDULE_DAILY_ENABLED="yes"    - Enable daily snapshots
+#   SCHEDULE_DAILY_HOUR="0"         - Hour to run (0-23)
+#   SCHEDULE_DAILY_MINUTE="0"       - Minute to run (0-59)
+#   SCHEDULE_WEEKLY_ENABLED="yes"   - Enable weekly snapshots
+#   SCHEDULE_WEEKLY_DAY="0"         - Day of week (0=Sun ... 6=Sat)
+#   SCHEDULE_WEEKLY_HOUR="2"        - Hour to run (0-23)
+#   SCHEDULE_WEEKLY_MINUTE="0"      - Minute to run (0-59)
+#   SCHEDULE_MONTHLY_ENABLED="no"   - Enable monthly snapshots
+#   SCHEDULE_MONTHLY_DAY="1"        - Day of month (1-28)
+#   SCHEDULE_MONTHLY_HOUR="3"       - Hour to run (0-23)
+#   SCHEDULE_MONTHLY_MINUTE="0"     - Minute to run (0-59)
 #
 # If the plugin is disabled globally, removes the cron file entirely.
 #
@@ -34,7 +40,6 @@ LOG_FILE="/var/log/${PLUGIN_NAME}.log"
 CRON_FILE="/etc/cron.d/${PLUGIN_NAME}"
 SCRIPTS_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}/scripts"
 
-# Defaults
 PLUGIN_ENABLED="yes"
 
 ###############################################################################
@@ -84,42 +89,83 @@ get_configured_shares() {
 }
 
 ###############################################################################
-# Schedule to Cron Expression
+# Clamp an integer to a range; return default if not a number
 ###############################################################################
 
-# Converts a human-readable schedule name to a cron timing expression.
-schedule_to_cron() {
-    local schedule="$1"
+clamp_int() {
+    local val="$1" min="$2" max="$3" default="$4"
+    if [[ ! "$val" =~ ^[0-9]+$ ]]; then echo "$default"; return; fi
+    if (( val < min )); then echo "$min"; return; fi
+    if (( val > max )); then echo "$max"; return; fi
+    echo "$val"
+}
 
-    case "${schedule}" in
-        every15min)
-            echo "*/15 * * * *"
-            ;;
-        hourly)
-            echo "0 * * * *"
-            ;;
-        every6hours)
-            echo "0 */6 * * *"
-            ;;
-        daily)
-            echo "0 2 * * *"
-            ;;
-        weekly)
-            echo "0 3 * * 0"
-            ;;
-        disabled|"")
-            echo ""
-            ;;
-        *)
-            # Check if it's a raw cron expression (5 fields)
-            if [[ "$schedule" =~ ^[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+$ ]]; then
-                echo "$schedule"
-            else
-                log "WARN" "Unknown schedule '${schedule}', treating as disabled"
-                echo ""
-            fi
-            ;;
-    esac
+###############################################################################
+# Generate Cron File
+###############################################################################
+
+###############################################################################
+# Load Global Schedule Defaults
+###############################################################################
+
+# Reads SCHEDULE_* keys from the global config into GLOBAL_SCHEDULE_* vars.
+load_global_schedules() {
+    GLOBAL_SCHEDULE_HOURLY_ENABLED="no"
+    GLOBAL_SCHEDULE_HOURLY_MINUTE="0"
+    GLOBAL_SCHEDULE_DAILY_ENABLED="yes"
+    GLOBAL_SCHEDULE_DAILY_HOUR="0"
+    GLOBAL_SCHEDULE_DAILY_MINUTE="0"
+    GLOBAL_SCHEDULE_WEEKLY_ENABLED="yes"
+    GLOBAL_SCHEDULE_WEEKLY_DAY="0"
+    GLOBAL_SCHEDULE_WEEKLY_HOUR="2"
+    GLOBAL_SCHEDULE_WEEKLY_MINUTE="0"
+    GLOBAL_SCHEDULE_MONTHLY_ENABLED="no"
+    GLOBAL_SCHEDULE_MONTHLY_DAY="1"
+    GLOBAL_SCHEDULE_MONTHLY_HOUR="3"
+    GLOBAL_SCHEDULE_MONTHLY_MINUTE="0"
+
+    if [[ -f "${GLOBAL_CFG}" ]]; then
+        local key val
+        while IFS='=' read -r key val; do
+            key="${key//[[:space:]]/}"
+            val="${val//\"/}"
+            case "$key" in
+                SCHEDULE_HOURLY_ENABLED)  GLOBAL_SCHEDULE_HOURLY_ENABLED="$val" ;;
+                SCHEDULE_HOURLY_MINUTE)   GLOBAL_SCHEDULE_HOURLY_MINUTE="$val" ;;
+                SCHEDULE_DAILY_ENABLED)   GLOBAL_SCHEDULE_DAILY_ENABLED="$val" ;;
+                SCHEDULE_DAILY_HOUR)      GLOBAL_SCHEDULE_DAILY_HOUR="$val" ;;
+                SCHEDULE_DAILY_MINUTE)    GLOBAL_SCHEDULE_DAILY_MINUTE="$val" ;;
+                SCHEDULE_WEEKLY_ENABLED)  GLOBAL_SCHEDULE_WEEKLY_ENABLED="$val" ;;
+                SCHEDULE_WEEKLY_DAY)      GLOBAL_SCHEDULE_WEEKLY_DAY="$val" ;;
+                SCHEDULE_WEEKLY_HOUR)     GLOBAL_SCHEDULE_WEEKLY_HOUR="$val" ;;
+                SCHEDULE_WEEKLY_MINUTE)   GLOBAL_SCHEDULE_WEEKLY_MINUTE="$val" ;;
+                SCHEDULE_MONTHLY_ENABLED) GLOBAL_SCHEDULE_MONTHLY_ENABLED="$val" ;;
+                SCHEDULE_MONTHLY_DAY)     GLOBAL_SCHEDULE_MONTHLY_DAY="$val" ;;
+                SCHEDULE_MONTHLY_HOUR)    GLOBAL_SCHEDULE_MONTHLY_HOUR="$val" ;;
+                SCHEDULE_MONTHLY_MINUTE)  GLOBAL_SCHEDULE_MONTHLY_MINUTE="$val" ;;
+            esac
+        done < "${GLOBAL_CFG}"
+    fi
+}
+
+###############################################################################
+# Resolve "global" schedule values for a share
+###############################################################################
+
+resolve_global_schedules() {
+    [[ "$SCHEDULE_HOURLY_ENABLED"  == "global" ]] && SCHEDULE_HOURLY_ENABLED="$GLOBAL_SCHEDULE_HOURLY_ENABLED"
+    [[ -z "$SCHEDULE_HOURLY_MINUTE"            ]] && SCHEDULE_HOURLY_MINUTE="$GLOBAL_SCHEDULE_HOURLY_MINUTE"
+    [[ "$SCHEDULE_DAILY_ENABLED"   == "global" ]] && SCHEDULE_DAILY_ENABLED="$GLOBAL_SCHEDULE_DAILY_ENABLED"
+    [[ -z "$SCHEDULE_DAILY_HOUR"               ]] && SCHEDULE_DAILY_HOUR="$GLOBAL_SCHEDULE_DAILY_HOUR"
+    [[ -z "$SCHEDULE_DAILY_MINUTE"             ]] && SCHEDULE_DAILY_MINUTE="$GLOBAL_SCHEDULE_DAILY_MINUTE"
+    [[ "$SCHEDULE_WEEKLY_ENABLED"  == "global" ]] && SCHEDULE_WEEKLY_ENABLED="$GLOBAL_SCHEDULE_WEEKLY_ENABLED"
+    [[ -z "$SCHEDULE_WEEKLY_DAY"               ]] && SCHEDULE_WEEKLY_DAY="$GLOBAL_SCHEDULE_WEEKLY_DAY"
+    [[ -z "$SCHEDULE_WEEKLY_HOUR"              ]] && SCHEDULE_WEEKLY_HOUR="$GLOBAL_SCHEDULE_WEEKLY_HOUR"
+    [[ -z "$SCHEDULE_WEEKLY_MINUTE"            ]] && SCHEDULE_WEEKLY_MINUTE="$GLOBAL_SCHEDULE_WEEKLY_MINUTE"
+    [[ "$SCHEDULE_MONTHLY_ENABLED" == "global" ]] && SCHEDULE_MONTHLY_ENABLED="$GLOBAL_SCHEDULE_MONTHLY_ENABLED"
+    [[ -z "$SCHEDULE_MONTHLY_DAY"              ]] && SCHEDULE_MONTHLY_DAY="$GLOBAL_SCHEDULE_MONTHLY_DAY"
+    [[ -z "$SCHEDULE_MONTHLY_HOUR"             ]] && SCHEDULE_MONTHLY_HOUR="$GLOBAL_SCHEDULE_MONTHLY_HOUR"
+    [[ -z "$SCHEDULE_MONTHLY_MINUTE"           ]] && SCHEDULE_MONTHLY_MINUTE="$GLOBAL_SCHEDULE_MONTHLY_MINUTE"
 }
 
 ###############################################################################
@@ -136,68 +182,110 @@ generate_cron_file() {
         return 0
     fi
 
-    local entry_count=0
-    local cron_content=""
+    load_global_schedules
 
-    # File header
-    cron_content+="# BTRFS Snapshots Plugin - Auto-generated cron jobs
-# Do not edit manually - regenerated by cron_update.sh
-# Last updated: $(date '+%Y-%m-%d %H:%M:%S')
-#
-# Format: minute hour day month weekday user command
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-"
+    local entry_count=0
+    # Build cron content line by line
+    local -a lines=(
+        "# BTRFS Snapshots Plugin - Auto-generated cron jobs"
+        "# Do not edit manually - regenerated by cron_update.sh"
+        "# Last updated: $(date '+%Y-%m-%d %H:%M:%S')"
+        "#"
+        "SHELL=/bin/bash"
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ""
+    )
 
     while IFS= read -r share; do
         [[ -z "$share" ]] && continue
 
         local cfg_file="${SHARE_CFG_DIR}/${share}.cfg"
-        local share_enabled="yes"
-        local schedule="disabled"
+
+        # Reset all schedule variables before sourcing
+        local ENABLED="yes"
+        local SCHEDULE_HOURLY_ENABLED="no"
+        local SCHEDULE_HOURLY_MINUTE="0"
+        local SCHEDULE_DAILY_ENABLED="no"
+        local SCHEDULE_DAILY_HOUR="0"
+        local SCHEDULE_DAILY_MINUTE="0"
+        local SCHEDULE_WEEKLY_ENABLED="no"
+        local SCHEDULE_WEEKLY_DAY="0"
+        local SCHEDULE_WEEKLY_HOUR="2"
+        local SCHEDULE_WEEKLY_MINUTE="0"
+        local SCHEDULE_MONTHLY_ENABLED="no"
+        local SCHEDULE_MONTHLY_DAY="1"
+        local SCHEDULE_MONTHLY_HOUR="3"
+        local SCHEDULE_MONTHLY_MINUTE="0"
 
         if [[ -f "${cfg_file}" ]]; then
-            # Reset variables before sourcing
-            ENABLED="yes"
-            SCHEDULE="disabled"
-
             # shellcheck source=/dev/null
             source "${cfg_file}"
-
-            share_enabled="${ENABLED:-yes}"
-            schedule="${SCHEDULE:-disabled}"
         fi
 
-        # Skip disabled shares
-        if [[ "${share_enabled}" != "yes" ]]; then
-            cron_content+="# ${share}: disabled
-"
+        # Resolve any "global" values from the global config
+        resolve_global_schedules
+
+        if [[ "${ENABLED}" != "yes" ]]; then
+            lines+=("# ${share}: disabled" "")
             continue
         fi
 
-        # Convert schedule to cron expression
-        local cron_expr
-        cron_expr="$(schedule_to_cron "${schedule}")"
-
-        if [[ -z "${cron_expr}" ]]; then
-            cron_content+="# ${share}: no schedule configured
-"
-            continue
-        fi
-
-        # Escape the share name for shell safety in the cron command
-        # We already validated it with sanitize_name at config time,
-        # but quote it in the cron entry for defense in depth.
         local safe_share="${share//\"/\\\"}"
+        local share_entries=0
 
-        # Build the cron entry: create snapshot, then rotate
-        # Run as root, redirect output to log
-        cron_content+="# Share: ${share} (schedule: ${schedule})
-${cron_expr} root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" scheduled >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" >> ${LOG_FILE} 2>&1
-"
+        lines+=("# Share: ${share}")
 
-        ((entry_count++))
-        log "INFO" "Cron entry for '${share}': ${cron_expr}"
+        # Hourly schedule
+        if [[ "${SCHEDULE_HOURLY_ENABLED}" == "yes" ]]; then
+            local hm
+            hm="$(clamp_int "${SCHEDULE_HOURLY_MINUTE}" 0 59 0)"
+            lines+=("${hm} * * * * root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" hourly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" hourly >> ${LOG_FILE} 2>&1")
+            ((entry_count++))
+            ((share_entries++))
+            log "INFO" "Cron entry for '${share}' (hourly): ${hm} * * * *"
+        fi
+
+        # Daily schedule
+        if [[ "${SCHEDULE_DAILY_ENABLED}" == "yes" ]]; then
+            local dh dm
+            dh="$(clamp_int "${SCHEDULE_DAILY_HOUR}"   0 23 0)"
+            dm="$(clamp_int "${SCHEDULE_DAILY_MINUTE}" 0 59 0)"
+            lines+=("${dm} ${dh} * * * root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" daily >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" daily >> ${LOG_FILE} 2>&1")
+            ((entry_count++))
+            ((share_entries++))
+            log "INFO" "Cron entry for '${share}' (daily): ${dm} ${dh} * * *"
+        fi
+
+        # Weekly schedule
+        if [[ "${SCHEDULE_WEEKLY_ENABLED}" == "yes" ]]; then
+            local wd wh wm
+            wd="$(clamp_int "${SCHEDULE_WEEKLY_DAY}"    0  6 0)"
+            wh="$(clamp_int "${SCHEDULE_WEEKLY_HOUR}"   0 23 2)"
+            wm="$(clamp_int "${SCHEDULE_WEEKLY_MINUTE}" 0 59 0)"
+            lines+=("${wm} ${wh} * * ${wd} root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" weekly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" weekly >> ${LOG_FILE} 2>&1")
+            ((entry_count++))
+            ((share_entries++))
+            log "INFO" "Cron entry for '${share}' (weekly): ${wm} ${wh} * * ${wd}"
+        fi
+
+        # Monthly schedule
+        if [[ "${SCHEDULE_MONTHLY_ENABLED}" == "yes" ]]; then
+            local md mh mm
+            md="$(clamp_int "${SCHEDULE_MONTHLY_DAY}"    1 28  1)"
+            mh="$(clamp_int "${SCHEDULE_MONTHLY_HOUR}"   0 23  3)"
+            mm="$(clamp_int "${SCHEDULE_MONTHLY_MINUTE}" 0 59  0)"
+            lines+=("${mm} ${mh} ${md} * * root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" monthly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" monthly >> ${LOG_FILE} 2>&1")
+            ((entry_count++))
+            ((share_entries++))
+            log "INFO" "Cron entry for '${share}' (monthly): ${mm} ${mh} ${md} * *"
+        fi
+
+        if [[ $share_entries -eq 0 ]]; then
+            lines+=("# ${share}: no schedules enabled")
+        fi
+
+        lines+=("")
+
     done <<< "${shares}"
 
     if [[ $entry_count -eq 0 ]]; then
@@ -206,17 +294,14 @@ ${cron_expr} root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" scheduled 
         return 0
     fi
 
-    # Write the cron file
-    echo "${cron_content}" > "${CRON_FILE}"
+    # Write cron file
+    printf '%s\n' "${lines[@]}" > "${CRON_FILE}"
 
-    # Cron files in /etc/cron.d must:
-    # - Be owned by root
-    # - Not be writable by group/other
-    # - Not be executable
+    # Cron files in /etc/cron.d must be owned by root, not world-writable
     chmod 644 "${CRON_FILE}" 2>/dev/null
 
     log "INFO" "Generated cron file with ${entry_count} entries at ${CRON_FILE}"
-    echo "Cron updated: ${entry_count} scheduled shares"
+    echo "Cron updated: ${entry_count} scheduled entries"
     return 0
 }
 
@@ -237,19 +322,15 @@ remove_cron_file() {
 ###############################################################################
 
 main() {
-    # Load configuration
     load_config
 
-    # If plugin is disabled, remove cron file
     if [[ "${PLUGIN_ENABLED}" != "yes" ]]; then
         log "INFO" "Plugin is disabled, removing cron file"
         remove_cron_file
         exit 0
     fi
 
-    # Generate cron entries
     generate_cron_file
-
     exit 0
 }
 

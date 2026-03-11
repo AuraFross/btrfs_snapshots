@@ -105,57 +105,158 @@ if (!$has_btrfs): ?>
         </dd>
     </dl>
 
-    <!-- Schedule Override -->
+    <!-- Hourly Schedule -->
     <dl>
-        <dt>Schedule:</dt>
+        <dt>Hourly Snapshots:</dt>
         <dd>
-            <select id="share_SCHEDULE" size="1">
-                <option value="global" <?= $share_cfg['SCHEDULE'] === 'global' ? 'selected' : '' ?>>
-                    Use Global Default (<?= htmlspecialchars(BTRFS_SNAP_SCHEDULES[$cfg['DEFAULT_SCHEDULE']] ?? $cfg['DEFAULT_SCHEDULE']) ?>)
-                </option>
-                <?php foreach (BTRFS_SNAP_SCHEDULES as $val => $label): ?>
-                <?= mk_option($share_cfg['SCHEDULE'], $val, $label) ?>
-                <?php endforeach; ?>
-            </select>
-            <div class="snap-help">Override the global schedule for this share, or use "Global Default".</div>
+            <div class="snap-schedule-row">
+                <select id="sched_hourly_enabled" size="1">
+                    <?= mk_option($share_cfg['SCHEDULE_HOURLY_ENABLED'], 'global', 'Use Global Default') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_HOURLY_ENABLED'], 'yes',    'Enabled') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_HOURLY_ENABLED'], 'no',     'Disabled') ?>
+                </select>
+                <span id="sched_hourly_fields">
+                &nbsp; at minute &nbsp;
+                <select id="sched_hourly_minute" size="1">
+                    <?php foreach ([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as $m): ?>
+                    <option value="<?= $m ?>" <?= intval($share_cfg['SCHEDULE_HOURLY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d', $m) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                &nbsp;&nbsp; Keep &nbsp;
+                <input type="number" id="sched_hourly_retain"
+                       value="<?= htmlspecialchars($share_cfg['SCHEDULE_HOURLY_RETAIN']) ?>"
+                       min="0" max="168" class="narrow">
+                &nbsp; snapshots
+                </span>
+            </div>
+            <div class="snap-help">Take a snapshot every hour at the specified minute (e.g. :00 = top of each hour). Only hourly snapshots count against the keep limit.</div>
+            <div class="snap-warning-box snap-retain-warn" id="warn_hourly" style="display:none;margin-top:6px;">
+                <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+            </div>
         </dd>
     </dl>
 
-    <!-- Retention Override -->
+    <!-- Daily Schedule -->
     <dl>
-        <dt>Retention Override:</dt>
+        <dt>Daily Snapshots:</dt>
         <dd>
-            <div class="snap-retention-grid">
-                <div>
-                    <label for="share_RETENTION_HOURS">Hours</label>
-                    <input type="number" id="share_RETENTION_HOURS"
-                           value="<?= htmlspecialchars($share_cfg['RETENTION_HOURS']) ?>"
-                           min="0" max="168" class="narrow"
-                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_HOURS']) ?>">
-                </div>
-                <div>
-                    <label for="share_RETENTION_DAYS">Days</label>
-                    <input type="number" id="share_RETENTION_DAYS"
-                           value="<?= htmlspecialchars($share_cfg['RETENTION_DAYS']) ?>"
-                           min="0" max="365" class="narrow"
-                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_DAYS']) ?>">
-                </div>
-                <div>
-                    <label for="share_RETENTION_WEEKS">Weeks</label>
-                    <input type="number" id="share_RETENTION_WEEKS"
-                           value="<?= htmlspecialchars($share_cfg['RETENTION_WEEKS']) ?>"
-                           min="0" max="52" class="narrow"
-                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_WEEKS']) ?>">
-                </div>
-                <div>
-                    <label for="share_RETENTION_MONTHS">Months</label>
-                    <input type="number" id="share_RETENTION_MONTHS"
-                           value="<?= htmlspecialchars($share_cfg['RETENTION_MONTHS']) ?>"
-                           min="0" max="120" class="narrow"
-                           placeholder="<?= htmlspecialchars($cfg['DEFAULT_RETENTION_MONTHS']) ?>">
-                </div>
+            <div class="snap-schedule-row">
+                <select id="sched_daily_enabled" size="1">
+                    <?= mk_option($share_cfg['SCHEDULE_DAILY_ENABLED'], 'global', 'Use Global Default') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_DAILY_ENABLED'], 'yes',    'Enabled') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_DAILY_ENABLED'], 'no',     'Disabled') ?>
+                </select>
+                <span id="sched_daily_fields">
+                &nbsp; at &nbsp;
+                <select id="sched_daily_hour" size="1">
+                    <?php for ($h = 0; $h < 24; $h++): ?>
+                    <option value="<?= $h ?>" <?= intval($share_cfg['SCHEDULE_DAILY_HOUR']) === $h ? 'selected' : '' ?>><?= sprintf('%02d', $h) ?></option>
+                    <?php endfor; ?>
+                </select>
+                :
+                <select id="sched_daily_minute" size="1">
+                    <?php foreach ([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as $m): ?>
+                    <option value="<?= $m ?>" <?= intval($share_cfg['SCHEDULE_DAILY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d', $m) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                &nbsp;&nbsp; Keep &nbsp;
+                <input type="number" id="sched_daily_retain"
+                       value="<?= htmlspecialchars($share_cfg['SCHEDULE_DAILY_RETAIN']) ?>"
+                       min="0" max="365" class="narrow">
+                &nbsp; snapshots
+                </span>
             </div>
-            <div class="snap-help">Leave blank to use global defaults. Set values to override per-share.</div>
+            <div class="snap-help">Take a snapshot every day at the specified time. Older daily snapshots beyond the keep count are deleted.</div>
+            <div class="snap-warning-box snap-retain-warn" id="warn_daily" style="display:none;margin-top:6px;">
+                <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+            </div>
+        </dd>
+    </dl>
+
+    <!-- Weekly Schedule -->
+    <dl>
+        <dt>Weekly Snapshots:</dt>
+        <dd>
+            <div class="snap-schedule-row">
+                <select id="sched_weekly_enabled" size="1">
+                    <?= mk_option($share_cfg['SCHEDULE_WEEKLY_ENABLED'], 'global', 'Use Global Default') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_WEEKLY_ENABLED'], 'yes',    'Enabled') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_WEEKLY_ENABLED'], 'no',     'Disabled') ?>
+                </select>
+                <span id="sched_weekly_fields">
+                &nbsp; every &nbsp;
+                <select id="sched_weekly_day" size="1">
+                    <?php $days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; ?>
+                    <?php foreach ($days as $idx => $label): ?>
+                    <option value="<?= $idx ?>" <?= intval($share_cfg['SCHEDULE_WEEKLY_DAY']) === $idx ? 'selected' : '' ?>><?= $label ?></option>
+                    <?php endforeach; ?>
+                </select>
+                &nbsp; at &nbsp;
+                <select id="sched_weekly_hour" size="1">
+                    <?php for ($h = 0; $h < 24; $h++): ?>
+                    <option value="<?= $h ?>" <?= intval($share_cfg['SCHEDULE_WEEKLY_HOUR']) === $h ? 'selected' : '' ?>><?= sprintf('%02d', $h) ?></option>
+                    <?php endfor; ?>
+                </select>
+                :
+                <select id="sched_weekly_minute" size="1">
+                    <?php foreach ([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as $m): ?>
+                    <option value="<?= $m ?>" <?= intval($share_cfg['SCHEDULE_WEEKLY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d', $m) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                &nbsp;&nbsp; Keep &nbsp;
+                <input type="number" id="sched_weekly_retain"
+                       value="<?= htmlspecialchars($share_cfg['SCHEDULE_WEEKLY_RETAIN']) ?>"
+                       min="0" max="52" class="narrow">
+                &nbsp; snapshots
+                </span>
+            </div>
+            <div class="snap-help">Take a snapshot once a week on the specified day and time. Weekly and daily pools are tracked independently.</div>
+            <div class="snap-warning-box snap-retain-warn" id="warn_weekly" style="display:none;margin-top:6px;">
+                <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+            </div>
+        </dd>
+    </dl>
+
+    <!-- Monthly Schedule -->
+    <dl>
+        <dt>Monthly Snapshots:</dt>
+        <dd>
+            <div class="snap-schedule-row">
+                <select id="sched_monthly_enabled" size="1">
+                    <?= mk_option($share_cfg['SCHEDULE_MONTHLY_ENABLED'], 'global', 'Use Global Default') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_MONTHLY_ENABLED'], 'yes',    'Enabled') ?>
+                    <?= mk_option($share_cfg['SCHEDULE_MONTHLY_ENABLED'], 'no',     'Disabled') ?>
+                </select>
+                <span id="sched_monthly_fields">
+                &nbsp; on the &nbsp;
+                <select id="sched_monthly_day" size="1">
+                    <?php for ($d = 1; $d <= 28; $d++): ?>
+                    <option value="<?= $d ?>" <?= intval($share_cfg['SCHEDULE_MONTHLY_DAY']) === $d ? 'selected' : '' ?>><?= $d ?></option>
+                    <?php endfor; ?>
+                </select>
+                &nbsp; at &nbsp;
+                <select id="sched_monthly_hour" size="1">
+                    <?php for ($h = 0; $h < 24; $h++): ?>
+                    <option value="<?= $h ?>" <?= intval($share_cfg['SCHEDULE_MONTHLY_HOUR']) === $h ? 'selected' : '' ?>><?= sprintf('%02d', $h) ?></option>
+                    <?php endfor; ?>
+                </select>
+                :
+                <select id="sched_monthly_minute" size="1">
+                    <?php foreach ([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as $m): ?>
+                    <option value="<?= $m ?>" <?= intval($share_cfg['SCHEDULE_MONTHLY_MINUTE']) === $m ? 'selected' : '' ?>><?= sprintf('%02d', $m) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                &nbsp;&nbsp; Keep &nbsp;
+                <input type="number" id="sched_monthly_retain"
+                       value="<?= htmlspecialchars($share_cfg['SCHEDULE_MONTHLY_RETAIN']) ?>"
+                       min="0" max="120" class="narrow">
+                &nbsp; snapshots
+                </span>
+            </div>
+            <div class="snap-help">Take a snapshot once a month on the specified day (max day 28 to work in all months). Monthly pool is tracked independently of daily and weekly.</div>
+            <div class="snap-warning-box snap-retain-warn" id="warn_monthly" style="display:none;margin-top:6px;">
+                <i class="fa fa-exclamation-triangle"></i> <strong>Keep is set to 0</strong> — snapshots will be created then immediately deleted. Set Keep to at least 1, or disable this schedule.
+            </div>
         </dd>
     </dl>
 
@@ -238,8 +339,28 @@ $(function () {
     var share = '<?= htmlspecialchars($share, ENT_QUOTES) ?>';
     BtrfsSnapshots.init(csrf);
     BtrfsSnapshots.loadShareSnapshots(share);
-
-    // No auto-refresh on config page to avoid overwriting user input
     BtrfsSnapshots.stopAutoRefresh();
+
+    var schedules = ['hourly', 'daily', 'weekly', 'monthly'];
+
+    // Hide/show per-type fields based on enabled value
+    function updateScheduleFields() {
+        schedules.forEach(function (type) {
+            var val = $('#sched_' + type + '_enabled').val();
+            var isGlobal = (val === 'global');
+            $('#sched_' + type + '_fields').toggle(!isGlobal);
+            // Warn only when explicitly enabled with retain=0
+            var retain = parseInt($('#sched_' + type + '_retain').val(), 10);
+            var warn = (val === 'yes') && (isNaN(retain) || retain === 0);
+            $('#warn_' + type).toggle(warn);
+        });
+    }
+
+    updateScheduleFields();
+
+    schedules.forEach(function (type) {
+        $('#sched_' + type + '_enabled').on('change', updateScheduleFields);
+        $('#sched_' + type + '_retain').on('input', updateScheduleFields);
+    });
 });
 </script>

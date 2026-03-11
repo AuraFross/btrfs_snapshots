@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "btrfs-snapshots">
   <!ENTITY author    "AuraFross">
-  <!ENTITY version   "2026.03.09">
+  <!ENTITY version   "2026.03.10">
   <!ENTITY gitURL    "https://github.com/AuraFross/btrfs_snapshots/releases/download/&version;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/AuraFross/btrfs_snapshots/main/btrfs-snapshots.plg">
   <!ENTITY pkgURL    "&gitURL;/&name;-&version;.txz">

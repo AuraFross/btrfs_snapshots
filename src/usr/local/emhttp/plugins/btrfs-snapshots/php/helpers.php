@@ -51,17 +51,29 @@ define('BTRFS_SNAP_SCHEDULES', [
  */
 function btrfs_snap_defaults(): array {
     return [
-        'ENABLED'                 => 'yes',
-        'DEFAULT_SCHEDULE'        => 'daily',
-        'DEFAULT_RETENTION_HOURS' => '24',
-        'DEFAULT_RETENTION_DAYS'  => '7',
-        'DEFAULT_RETENTION_WEEKS' => '4',
-        'DEFAULT_RETENTION_MONTHS'=> '6',
-        'SNAPSHOT_FORMAT'         => '@GMT-%Y.%m.%d-%H.%M.%S',
-        'USE_UTC'                 => 'yes',
-        'AUTO_CONVERT_SUBVOLUMES' => 'no',
-        'HIDE_SNAPDIR'            => 'yes',
-        'LOG_LEVEL'               => 'info',
+        'ENABLED'                  => 'yes',
+        'SCHEDULE_HOURLY_ENABLED'  => 'no',
+        'SCHEDULE_HOURLY_MINUTE'   => '0',
+        'SCHEDULE_HOURLY_RETAIN'   => '0',
+        'SCHEDULE_DAILY_ENABLED'   => 'yes',
+        'SCHEDULE_DAILY_HOUR'      => '0',
+        'SCHEDULE_DAILY_MINUTE'    => '0',
+        'SCHEDULE_DAILY_RETAIN'    => '2',
+        'SCHEDULE_WEEKLY_ENABLED'  => 'yes',
+        'SCHEDULE_WEEKLY_DAY'      => '0',
+        'SCHEDULE_WEEKLY_HOUR'     => '2',
+        'SCHEDULE_WEEKLY_MINUTE'   => '0',
+        'SCHEDULE_WEEKLY_RETAIN'   => '1',
+        'SCHEDULE_MONTHLY_ENABLED' => 'no',
+        'SCHEDULE_MONTHLY_DAY'     => '1',
+        'SCHEDULE_MONTHLY_HOUR'    => '3',
+        'SCHEDULE_MONTHLY_MINUTE'  => '0',
+        'SCHEDULE_MONTHLY_RETAIN'  => '0',
+        'SNAPSHOT_FORMAT'          => '@GMT-%Y.%m.%d-%H.%M.%S',
+        'USE_UTC'                  => 'yes',
+        'AUTO_CONVERT_SUBVOLUMES'  => 'no',
+        'HIDE_SNAPDIR'             => 'yes',
+        'LOG_LEVEL'                => 'info',
     ];
 }
 
@@ -96,14 +108,26 @@ function get_plugin_config(): array {
 function get_share_config(string $share): array {
     $share = sanitize_share_name($share);
     $defaults = [
-        'ENABLED'          => 'yes',
-        'SCHEDULE'         => 'global',
-        'RETENTION_HOURS'  => '',
-        'RETENTION_DAYS'   => '',
-        'RETENTION_WEEKS'  => '',
-        'RETENTION_MONTHS' => '',
-        'SNAPDIR'          => '.snapshots',
-        'SMB_SHADOW_COPY'  => 'no',
+        'ENABLED'                  => 'yes',
+        'SNAPDIR'                  => '.snapshots',
+        'SMB_SHADOW_COPY'          => 'no',
+        'SCHEDULE_HOURLY_ENABLED'  => 'global',
+        'SCHEDULE_HOURLY_MINUTE'   => '',
+        'SCHEDULE_HOURLY_RETAIN'   => '',
+        'SCHEDULE_DAILY_ENABLED'   => 'global',
+        'SCHEDULE_DAILY_HOUR'      => '',
+        'SCHEDULE_DAILY_MINUTE'    => '',
+        'SCHEDULE_DAILY_RETAIN'    => '',
+        'SCHEDULE_WEEKLY_ENABLED'  => 'global',
+        'SCHEDULE_WEEKLY_DAY'      => '',
+        'SCHEDULE_WEEKLY_HOUR'     => '',
+        'SCHEDULE_WEEKLY_MINUTE'   => '',
+        'SCHEDULE_WEEKLY_RETAIN'   => '',
+        'SCHEDULE_MONTHLY_ENABLED' => 'global',
+        'SCHEDULE_MONTHLY_DAY'     => '',
+        'SCHEDULE_MONTHLY_HOUR'    => '',
+        'SCHEDULE_MONTHLY_MINUTE'  => '',
+        'SCHEDULE_MONTHLY_RETAIN'  => '',
     ];
     $cfg_file = BTRFS_SNAP_SHARES_DIR . '/' . $share . '.cfg';
     $cfg = [];
@@ -131,8 +155,11 @@ function save_share_config(string $share, array $config): bool {
     $cfg_file = BTRFS_SNAP_SHARES_DIR . '/' . $share . '.cfg';
     $lines = [];
     $allowed_keys = [
-        'ENABLED', 'SCHEDULE', 'RETENTION_HOURS', 'RETENTION_DAYS',
-        'RETENTION_WEEKS', 'RETENTION_MONTHS', 'SNAPDIR', 'SMB_SHADOW_COPY',
+        'ENABLED', 'SNAPDIR', 'SMB_SHADOW_COPY',
+        'SCHEDULE_HOURLY_ENABLED', 'SCHEDULE_HOURLY_MINUTE', 'SCHEDULE_HOURLY_RETAIN',
+        'SCHEDULE_DAILY_ENABLED',   'SCHEDULE_DAILY_HOUR',   'SCHEDULE_DAILY_MINUTE',   'SCHEDULE_DAILY_RETAIN',
+        'SCHEDULE_WEEKLY_ENABLED',  'SCHEDULE_WEEKLY_DAY',   'SCHEDULE_WEEKLY_HOUR',    'SCHEDULE_WEEKLY_MINUTE',  'SCHEDULE_WEEKLY_RETAIN',
+        'SCHEDULE_MONTHLY_ENABLED', 'SCHEDULE_MONTHLY_DAY',  'SCHEDULE_MONTHLY_HOUR',   'SCHEDULE_MONTHLY_MINUTE', 'SCHEDULE_MONTHLY_RETAIN',
     ];
     foreach ($allowed_keys as $key) {
         if (isset($config[$key])) {

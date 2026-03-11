@@ -1,30 +1,24 @@
 #!/bin/bash
 #
-# snapshot_rotate.sh - GFS rotation for BTRFS snapshots
+# snapshot_rotate.sh - Per-type FIFO rotation for BTRFS snapshots
 #
-# Usage: snapshot_rotate.sh [share_name]
+# Usage: snapshot_rotate.sh <share_name> [type]
 #
-# If share_name is provided, rotate snapshots for that share only.
-# If omitted, rotate snapshots for ALL configured shares.
+# type: daily, weekly, or monthly
+#       If omitted, all three types are rotated for the share.
 #
-# Implements Grandfather-Father-Son (GFS) retention policy:
-#   - Keep N most recent snapshots per hourly bucket
-#   - Keep N most recent snapshots per daily bucket
-#   - Keep N most recent snapshots per weekly bucket
-#   - Keep N most recent snapshots per monthly bucket
+# Each snapshot's type is read from the .snapshot_meta file inside the
+# snapshot directory. Only snapshots with type=daily, weekly, or monthly
+# are auto-rotated. Snapshots with type=manual, scheduled, pre-update,
+# or missing metadata are never deleted by this script.
 #
-# The algorithm identifies which time bucket each snapshot belongs to,
-# keeps the most recent snapshot in each bucket (up to the retention
-# count), and deletes the rest.
+# Retention counts come from the per-share config:
+#   SCHEDULE_DAILY_RETAIN=7
+#   SCHEDULE_WEEKLY_RETAIN=4
+#   SCHEDULE_MONTHLY_RETAIN=12
 #
-# Per-share config is loaded from:
-#   /boot/config/plugins/btrfs-snapshots/shares/<name>.cfg
-#
-# Expected config keys:
-#   RETENTION_HOURLY=24
-#   RETENTION_DAILY=7
-#   RETENTION_WEEKLY=4
-#   RETENTION_MONTHLY=12
+# For each type, the N most recent snapshots (sorted by filename timestamp)
+# are kept; any older ones are deleted.
 #
 # Exit codes:
 #   0 - Success
@@ -39,16 +33,8 @@ PLUGIN_NAME="btrfs-snapshots"
 GLOBAL_CFG="/boot/config/plugins/${PLUGIN_NAME}/${PLUGIN_NAME}.cfg"
 SHARE_CFG_DIR="/boot/config/plugins/${PLUGIN_NAME}/shares"
 LOG_FILE="/var/log/${PLUGIN_NAME}.log"
-SCRIPTS_DIR="$(dirname "$(readlink -f "$0")")"
 SNAP_DIR_NAME=".snapshots"
 
-# Default retention (overridden per-share)
-DEFAULT_RETENTION_HOURLY=24
-DEFAULT_RETENTION_DAILY=7
-DEFAULT_RETENTION_WEEKLY=4
-DEFAULT_RETENTION_MONTHLY=12
-
-# Defaults
 PLUGIN_ENABLED="yes"
 
 ###############################################################################
@@ -92,23 +78,45 @@ load_config() {
     fi
 }
 
-# Load per-share configuration, setting retention variables.
 load_share_config() {
     local share_name="$1"
     local cfg_file="${SHARE_CFG_DIR}/${share_name}.cfg"
 
-    # Reset to defaults
-    RETENTION_HOURLY="${DEFAULT_RETENTION_HOURLY}"
-    RETENTION_DAILY="${DEFAULT_RETENTION_DAILY}"
-    RETENTION_WEEKLY="${DEFAULT_RETENTION_WEEKLY}"
-    RETENTION_MONTHLY="${DEFAULT_RETENTION_MONTHLY}"
+    # Start from global config retain values as fallback
+    SCHEDULE_HOURLY_RETAIN=0
+    SCHEDULE_DAILY_RETAIN=2
+    SCHEDULE_WEEKLY_RETAIN=1
+    SCHEDULE_MONTHLY_RETAIN=0
 
+    # Read global retain values first
+    if [[ -f "${GLOBAL_CFG}" ]]; then
+        local key val
+        while IFS='=' read -r key val; do
+            key="${key//[[:space:]]/}"
+            val="${val//\"/}"
+            case "$key" in
+                SCHEDULE_HOURLY_RETAIN)  SCHEDULE_HOURLY_RETAIN="$val" ;;
+                SCHEDULE_DAILY_RETAIN)   SCHEDULE_DAILY_RETAIN="$val" ;;
+                SCHEDULE_WEEKLY_RETAIN)  SCHEDULE_WEEKLY_RETAIN="$val" ;;
+                SCHEDULE_MONTHLY_RETAIN) SCHEDULE_MONTHLY_RETAIN="$val" ;;
+            esac
+        done < "${GLOBAL_CFG}"
+    fi
+
+    # Per-share config overrides global if set (non-empty)
     if [[ -f "${cfg_file}" ]]; then
-        # shellcheck source=/dev/null
-        source "${cfg_file}"
-        log "INFO" "Loaded config for share '${share_name}': hourly=${RETENTION_HOURLY} daily=${RETENTION_DAILY} weekly=${RETENTION_WEEKLY} monthly=${RETENTION_MONTHLY}"
+        local phr pdyr pwr pmr
+        phr="$(grep -m1 '^SCHEDULE_HOURLY_RETAIN='  "$cfg_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"')"
+        pdyr="$(grep -m1 '^SCHEDULE_DAILY_RETAIN='   "$cfg_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"')"
+        pwr="$(grep -m1 '^SCHEDULE_WEEKLY_RETAIN='  "$cfg_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"')"
+        pmr="$(grep -m1 '^SCHEDULE_MONTHLY_RETAIN=' "$cfg_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"')"
+        [[ -n "$phr"  ]] && SCHEDULE_HOURLY_RETAIN="$phr"
+        [[ -n "$pdyr" ]] && SCHEDULE_DAILY_RETAIN="$pdyr"
+        [[ -n "$pwr"  ]] && SCHEDULE_WEEKLY_RETAIN="$pwr"
+        [[ -n "$pmr"  ]] && SCHEDULE_MONTHLY_RETAIN="$pmr"
+        log "INFO" "Loaded config for '${share_name}': hourly_retain=${SCHEDULE_HOURLY_RETAIN} daily_retain=${SCHEDULE_DAILY_RETAIN} weekly_retain=${SCHEDULE_WEEKLY_RETAIN} monthly_retain=${SCHEDULE_MONTHLY_RETAIN}"
     else
-        log "WARN" "No config found for share '${share_name}' at ${cfg_file}, using defaults"
+        log "WARN" "No config found for '${share_name}', using global defaults"
     fi
 }
 
@@ -116,7 +124,6 @@ load_share_config() {
 # Discover Configured Shares
 ###############################################################################
 
-# Returns a list of all share names that have config files.
 get_configured_shares() {
     if [[ ! -d "${SHARE_CFG_DIR}" ]]; then
         return
@@ -135,7 +142,6 @@ get_configured_shares() {
 # Discover Disks for a Share
 ###############################################################################
 
-# Discovers all mount points under /mnt/ where this share has data.
 find_share_disks() {
     local share_name="$1"
     local disks=()
@@ -145,7 +151,6 @@ find_share_disks() {
     for entry in /mnt/*/; do
         local name
         name="$(basename "$entry")"
-        # Skip virtual/system mounts
         case " $skip " in
             *" $name "*) continue ;;
         esac
@@ -164,7 +169,7 @@ find_share_disks() {
 # Converts @GMT-YYYY.MM.DD-HH.MM.SS to epoch seconds for sorting.
 snap_to_epoch() {
     local snap_name="$1"
-    local ts_part="${snap_name#@GMT-}"  # YYYY.MM.DD-HH.MM.SS
+    local ts_part="${snap_name#@GMT-}"
 
     if [[ ! "$ts_part" =~ ^([0-9]{4})\.([0-9]{2})\.([0-9]{2})-([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
         echo "0"
@@ -172,138 +177,125 @@ snap_to_epoch() {
     fi
 
     local datestr="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}"
-
-    # Convert to epoch; use UTC since that's how they're created by default
     date -u -d "${datestr}" '+%s' 2>/dev/null || echo "0"
 }
 
 ###############################################################################
-# Compute Time Buckets
+# Get Snapshot Type from Metadata
 ###############################################################################
 
-# Returns the hourly bucket key for an epoch: YYYY-MM-DD-HH
-bucket_hourly() {
-    date -u -d "@$1" '+%Y-%m-%d-%H' 2>/dev/null
-}
-
-# Returns the daily bucket key: YYYY-MM-DD
-bucket_daily() {
-    date -u -d "@$1" '+%Y-%m-%d' 2>/dev/null
-}
-
-# Returns the weekly bucket key: YYYY-WNN (ISO week number)
-bucket_weekly() {
-    date -u -d "@$1" '+%Y-W%V' 2>/dev/null
-}
-
-# Returns the monthly bucket key: YYYY-MM
-bucket_monthly() {
-    date -u -d "@$1" '+%Y-%m' 2>/dev/null
+# Reads the type= field from .snapshot_meta inside a snapshot directory.
+# Returns "manual" if the meta file is missing or has no type field.
+# Only daily, weekly, monthly snapshots are auto-rotatable.
+get_snap_type() {
+    local snap_path="$1"
+    local meta_file="${snap_path}/.snapshot_meta"
+    if [[ -f "$meta_file" ]]; then
+        local snap_type
+        snap_type="$(grep -m1 '^type=' "$meta_file" 2>/dev/null | cut -d'=' -f2)"
+        echo "${snap_type:-manual}"
+    else
+        echo "manual"
+    fi
 }
 
 ###############################################################################
-# GFS Rotation Logic
+# Rotate Snapshots of One Type on One Disk
 ###############################################################################
 
-# Given a list of snapshots (path|epoch, one per line, sorted newest-first),
-# apply GFS retention and return the list of snapshots to DELETE.
-#
-# Algorithm:
-# 1. Assign each snapshot to its time buckets (hourly, daily, weekly, monthly).
-# 2. For each granularity, keep the newest snapshot in each bucket, up to N buckets.
-# 3. A snapshot is KEPT if it's the representative of any bucket at any granularity.
-# 4. All other snapshots are marked for deletion.
-apply_gfs_retention() {
-    local -a snap_lines=()
-    while IFS= read -r line; do
-        [[ -n "$line" ]] && snap_lines+=("$line")
+rotate_type_on_disk() {
+    local share_name="$1"
+    local disk="$2"
+    local type="$3"
+    local retain="$4"
+
+    local snap_dir="${disk}/${share_name}/${SNAP_DIR_NAME}"
+    [[ -d "${snap_dir}" ]] || return 0
+
+    # Collect all snapshots of the specified type with their epoch timestamps
+    local -a typed_snaps=()
+    local snap_entry
+
+    for snap_entry in "${snap_dir}"/@GMT-*; do
+        [[ -d "${snap_entry}" ]] || continue
+
+        local snap_name
+        snap_name="$(basename "${snap_entry}")"
+
+        # Validate filename format
+        if [[ ! "$snap_name" =~ ^@GMT-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9]{2}\.[0-9]{2}\.[0-9]{2}$ ]]; then
+            continue
+        fi
+
+        # Filter by type
+        local snap_type
+        snap_type="$(get_snap_type "${snap_entry}")"
+        if [[ "${snap_type}" != "${type}" ]]; then
+            continue
+        fi
+
+        local epoch
+        epoch="$(snap_to_epoch "${snap_name}")"
+        [[ "${epoch}" == "0" ]] && continue
+
+        typed_snaps+=("${snap_entry}|${epoch}")
     done
 
-    if [[ ${#snap_lines[@]} -eq 0 ]]; then
-        return
+    local snap_count=${#typed_snaps[@]}
+
+    if [[ $snap_count -eq 0 ]]; then
+        log "INFO" "No ${type} snapshots on ${disk} for '${share_name}'"
+        return 0
     fi
 
-    # Build arrays: snap_paths and snap_epochs (already sorted newest-first)
-    local -a snap_paths=()
-    local -a snap_epochs=()
-    local entry
-    for entry in "${snap_lines[@]}"; do
-        snap_paths+=("${entry%%|*}")
-        snap_epochs+=("${entry##*|}")
-    done
+    log "INFO" "Found ${snap_count} ${type} snapshots on ${disk} for '${share_name}' (retain: ${retain})"
 
-    local total=${#snap_paths[@]}
+    if [[ $snap_count -le $retain ]]; then
+        log "INFO" "All ${type} snapshots within retention limit on ${disk}"
+        return 0
+    fi
 
-    # Track which snapshots to keep (by index)
-    local -A keep_set
+    # Sort newest-first by epoch
+    local sorted_snaps
+    sorted_snaps="$(printf '%s\n' "${typed_snaps[@]}" | sort -t'|' -k2 -rn)"
 
-    # Process each granularity
-    local granularity
-    for granularity in hourly daily weekly monthly; do
-        local max_buckets
-        case "$granularity" in
-            hourly)  max_buckets="${RETENTION_HOURLY}" ;;
-            daily)   max_buckets="${RETENTION_DAILY}" ;;
-            weekly)  max_buckets="${RETENTION_WEEKLY}" ;;
-            monthly) max_buckets="${RETENTION_MONTHLY}" ;;
-        esac
+    # Keep the newest RETAIN entries; delete the rest
+    local idx=0
+    local deleted=0
+    local errors=0
 
-        # If retention is 0, skip this granularity
-        [[ "$max_buckets" -le 0 ]] 2>/dev/null && continue
+    while IFS= read -r entry; do
+        [[ -z "$entry" ]] && continue
+        local snap_path="${entry%%|*}"
+        ((idx++))
 
-        # Track buckets seen and how many we've kept
-        local -A seen_buckets=()
-        local kept=0
-        local idx
-
-        for idx in $(seq 0 $((total - 1))); do
-            local epoch="${snap_epochs[$idx]}"
-            local bucket
-
-            case "$granularity" in
-                hourly)  bucket="$(bucket_hourly "$epoch")" ;;
-                daily)   bucket="$(bucket_daily "$epoch")" ;;
-                weekly)  bucket="$(bucket_weekly "$epoch")" ;;
-                monthly) bucket="$(bucket_monthly "$epoch")" ;;
-            esac
-
-            [[ -z "$bucket" ]] && continue
-
-            # If we haven't seen this bucket yet, this is the newest in it
-            if [[ -z "${seen_buckets[$bucket]+x}" ]]; then
-                seen_buckets[$bucket]=1
-                ((kept++))
-
-                # Keep this snapshot if we haven't exceeded our bucket limit
-                if [[ $kept -le $max_buckets ]]; then
-                    keep_set[$idx]=1
-                fi
+        if [[ $idx -gt $retain ]]; then
+            if btrfs subvolume delete "${snap_path}" &>/dev/null; then
+                log "INFO" "Rotated (deleted): ${snap_path}"
+                ((deleted++))
+            else
+                log "ERROR" "Failed to delete during rotation: ${snap_path}"
+                ((errors++))
             fi
-        done
-    done
-
-    # Output snapshots to delete (those NOT in keep_set)
-    local idx
-    for idx in $(seq 0 $((total - 1))); do
-        if [[ -z "${keep_set[$idx]+x}" ]]; then
-            echo "${snap_paths[$idx]}"
         fi
-    done
+    done <<< "${sorted_snaps}"
+
+    log "INFO" "Rotation complete for ${type} on ${disk}/${share_name}: ${deleted} deleted, ${errors} errors"
+    return 0
 }
 
 ###############################################################################
-# Rotate Snapshots for a Single Share
+# Rotate All Types for a Share
 ###############################################################################
 
 rotate_share() {
     local share_name="$1"
+    local type="${2:-}"
 
-    log "INFO" "Starting rotation for share '${share_name}'"
+    log "INFO" "Starting rotation for share '${share_name}' type='${type:-all}'"
 
-    # Load share-specific retention config
     load_share_config "${share_name}"
 
-    # Find all disks
     local disks
     disks="$(find_share_disks "${share_name}")"
 
@@ -312,82 +304,38 @@ rotate_share() {
         return 0
     fi
 
-    local total_deleted=0
-    local total_kept=0
-    local total_errors=0
+    local -a types_to_rotate=()
 
-    while IFS= read -r disk; do
-        local snap_dir="${disk}/${share_name}/${SNAP_DIR_NAME}"
+    if [[ -n "$type" ]]; then
+        case "$type" in
+            hourly|daily|weekly|monthly)
+                types_to_rotate=("$type")
+                ;;
+            *)
+                log "WARN" "Unknown snapshot type '${type}', skipping rotation"
+                return 1
+                ;;
+        esac
+    else
+        types_to_rotate=(hourly daily weekly monthly)
+    fi
 
-        [[ -d "${snap_dir}" ]] || continue
+    local t
+    for t in "${types_to_rotate[@]}"; do
+        local retain
+        case "$t" in
+            hourly)  retain="${SCHEDULE_HOURLY_RETAIN:-0}" ;;
+            daily)   retain="${SCHEDULE_DAILY_RETAIN:-2}" ;;
+            weekly)  retain="${SCHEDULE_WEEKLY_RETAIN:-1}" ;;
+            monthly) retain="${SCHEDULE_MONTHLY_RETAIN:-0}" ;;
+        esac
 
-        # Collect all snapshots with their epochs, sorted newest-first
-        local -a snap_list=()
-        local snap_entry
-        for snap_entry in "${snap_dir}"/@GMT-*; do
-            [[ -d "${snap_entry}" ]] || continue
+        while IFS= read -r disk; do
+            rotate_type_on_disk "${share_name}" "${disk}" "${t}" "${retain}"
+        done <<< "${disks}"
+    done
 
-            local snap_name
-            snap_name="$(basename "${snap_entry}")"
-
-            # Validate format
-            if [[ ! "$snap_name" =~ ^@GMT-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9]{2}\.[0-9]{2}\.[0-9]{2}$ ]]; then
-                continue
-            fi
-
-            local epoch
-            epoch="$(snap_to_epoch "${snap_name}")"
-            [[ "$epoch" == "0" ]] && continue
-
-            snap_list+=("${snap_entry}|${epoch}")
-        done
-
-        local snap_count=${#snap_list[@]}
-        if [[ $snap_count -eq 0 ]]; then
-            log "INFO" "No snapshots found on ${disk} for '${share_name}'"
-            continue
-        fi
-
-        log "INFO" "Found ${snap_count} snapshots on ${disk} for '${share_name}'"
-
-        # Sort newest-first by epoch (field after |)
-        local sorted_snaps
-        sorted_snaps="$(printf '%s\n' "${snap_list[@]}" | sort -t'|' -k2 -rn)"
-
-        # Apply GFS retention and get list of snapshots to delete
-        local to_delete
-        to_delete="$(echo "${sorted_snaps}" | apply_gfs_retention)"
-
-        if [[ -z "$to_delete" ]]; then
-            log "INFO" "All snapshots on ${disk} for '${share_name}' are within retention policy"
-            ((total_kept += snap_count))
-            continue
-        fi
-
-        # Count kept
-        local delete_count
-        delete_count="$(echo "${to_delete}" | wc -l)"
-        local keep_count=$((snap_count - delete_count))
-        ((total_kept += keep_count))
-
-        # Delete expired snapshots
-        while IFS= read -r snap_path; do
-            [[ -z "$snap_path" ]] && continue
-
-            local snap_name
-            snap_name="$(basename "${snap_path}")"
-
-            if btrfs subvolume delete "${snap_path}" &>/dev/null; then
-                log "INFO" "Rotated (deleted): ${snap_path}"
-                ((total_deleted++))
-            else
-                log "ERROR" "Failed to delete during rotation: ${snap_path}"
-                ((total_errors++))
-            fi
-        done <<< "${to_delete}"
-    done <<< "${disks}"
-
-    log "INFO" "Rotation complete for '${share_name}': ${total_deleted} deleted, ${total_kept} kept, ${total_errors} errors"
+    log "INFO" "Rotation finished for share '${share_name}'"
     return 0
 }
 
@@ -396,23 +344,20 @@ rotate_share() {
 ###############################################################################
 
 main() {
-    local share_name="$1"
+    local share_name="${1:-}"
+    local type="${2:-}"
 
-    # Load global configuration
     load_config
 
-    # Check if plugin is enabled
     if [[ "${PLUGIN_ENABLED}" != "yes" ]]; then
         log "INFO" "Plugin is disabled, skipping rotation"
         exit 0
     fi
 
     if [[ -n "${share_name}" ]]; then
-        # Rotate a single share
         share_name="$(sanitize_name "${share_name}")" || exit 1
-        rotate_share "${share_name}"
+        rotate_share "${share_name}" "${type}"
     else
-        # Rotate all configured shares
         log "INFO" "Starting rotation for all configured shares"
 
         local shares
@@ -427,11 +372,10 @@ main() {
         while IFS= read -r share; do
             [[ -z "$share" ]] && continue
 
-            # Check if share is enabled in its config
             local cfg_file="${SHARE_CFG_DIR}/${share}.cfg"
             local share_enabled="yes"
             if [[ -f "$cfg_file" ]]; then
-                share_enabled="$(grep -E '^ENABLED=' "$cfg_file" 2>/dev/null | cut -d'=' -f2)"
+                share_enabled="$(grep -E '^ENABLED=' "$cfg_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"')"
                 share_enabled="${share_enabled:-yes}"
             fi
 
@@ -440,7 +384,7 @@ main() {
                 continue
             fi
 
-            rotate_share "${share}"
+            rotate_share "${share}" ""
         done <<< "${shares}"
 
         log "INFO" "All share rotations complete"

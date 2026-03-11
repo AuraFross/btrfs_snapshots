@@ -450,15 +450,31 @@ var BtrfsSnapshots = (function ($) {
 
     function saveShareConfig(share) {
         var formData = {
-            share: share,
-            ENABLED: $('#share_ENABLED').val(),
-            SCHEDULE: $('#share_SCHEDULE').val(),
-            RETENTION_HOURS: $('#share_RETENTION_HOURS').val(),
-            RETENTION_DAYS: $('#share_RETENTION_DAYS').val(),
-            RETENTION_WEEKS: $('#share_RETENTION_WEEKS').val(),
-            RETENTION_MONTHS: $('#share_RETENTION_MONTHS').val(),
-            SNAPDIR: $('#share_SNAPDIR').val(),
-            SMB_SHADOW_COPY: $('#share_SMB_SHADOW_COPY').val()
+            share:  share,
+            ENABLED:       $('#share_ENABLED').val(),
+            SNAPDIR:       $('#share_SNAPDIR').val(),
+            SMB_SHADOW_COPY: $('#share_SMB_SHADOW_COPY').val(),
+
+            SCHEDULE_HOURLY_ENABLED:  $('#sched_hourly_enabled').val(),
+            SCHEDULE_HOURLY_MINUTE:   $('#sched_hourly_minute').val(),
+            SCHEDULE_HOURLY_RETAIN:   $('#sched_hourly_retain').val(),
+
+            SCHEDULE_DAILY_ENABLED:   $('#sched_daily_enabled').val(),
+            SCHEDULE_DAILY_HOUR:      $('#sched_daily_hour').val(),
+            SCHEDULE_DAILY_MINUTE:    $('#sched_daily_minute').val(),
+            SCHEDULE_DAILY_RETAIN:    $('#sched_daily_retain').val(),
+
+            SCHEDULE_WEEKLY_ENABLED:  $('#sched_weekly_enabled').val(),
+            SCHEDULE_WEEKLY_DAY:      $('#sched_weekly_day').val(),
+            SCHEDULE_WEEKLY_HOUR:     $('#sched_weekly_hour').val(),
+            SCHEDULE_WEEKLY_MINUTE:   $('#sched_weekly_minute').val(),
+            SCHEDULE_WEEKLY_RETAIN:   $('#sched_weekly_retain').val(),
+
+            SCHEDULE_MONTHLY_ENABLED: $('#sched_monthly_enabled').val(),
+            SCHEDULE_MONTHLY_DAY:     $('#sched_monthly_day').val(),
+            SCHEDULE_MONTHLY_HOUR:    $('#sched_monthly_hour').val(),
+            SCHEDULE_MONTHLY_MINUTE:  $('#sched_monthly_minute').val(),
+            SCHEDULE_MONTHLY_RETAIN:  $('#sched_monthly_retain').val()
         };
 
         apiPost('save_share_config', formData, function (err, data) {

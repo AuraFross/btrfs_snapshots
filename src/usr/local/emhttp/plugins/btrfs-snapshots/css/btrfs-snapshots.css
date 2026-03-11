@@ -422,6 +422,7 @@ table.snap-table .col-actions {
     min-width: 200px;
 }
 
+
 .snap-retention-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
