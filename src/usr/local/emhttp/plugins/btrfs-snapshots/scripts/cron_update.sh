@@ -239,7 +239,7 @@ generate_cron_file() {
         if [[ "${SCHEDULE_HOURLY_ENABLED}" == "yes" ]]; then
             local hm
             hm="$(clamp_int "${SCHEDULE_HOURLY_MINUTE}" 0 59 0)"
-            lines+=("${hm} * * * * root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" hourly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" hourly >> ${LOG_FILE} 2>&1")
+            lines+=("${hm} * * * * ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" hourly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" hourly >> ${LOG_FILE} 2>&1")
             ((entry_count++))
             ((share_entries++))
             log "INFO" "Cron entry for '${share}' (hourly): ${hm} * * * *"
@@ -250,7 +250,7 @@ generate_cron_file() {
             local dh dm
             dh="$(clamp_int "${SCHEDULE_DAILY_HOUR}"   0 23 0)"
             dm="$(clamp_int "${SCHEDULE_DAILY_MINUTE}" 0 59 0)"
-            lines+=("${dm} ${dh} * * * root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" daily >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" daily >> ${LOG_FILE} 2>&1")
+            lines+=("${dm} ${dh} * * * ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" daily >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" daily >> ${LOG_FILE} 2>&1")
             ((entry_count++))
             ((share_entries++))
             log "INFO" "Cron entry for '${share}' (daily): ${dm} ${dh} * * *"
@@ -262,7 +262,7 @@ generate_cron_file() {
             wd="$(clamp_int "${SCHEDULE_WEEKLY_DAY}"    0  6 0)"
             wh="$(clamp_int "${SCHEDULE_WEEKLY_HOUR}"   0 23 2)"
             wm="$(clamp_int "${SCHEDULE_WEEKLY_MINUTE}" 0 59 0)"
-            lines+=("${wm} ${wh} * * ${wd} root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" weekly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" weekly >> ${LOG_FILE} 2>&1")
+            lines+=("${wm} ${wh} * * ${wd} ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" weekly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" weekly >> ${LOG_FILE} 2>&1")
             ((entry_count++))
             ((share_entries++))
             log "INFO" "Cron entry for '${share}' (weekly): ${wm} ${wh} * * ${wd}"
@@ -274,7 +274,7 @@ generate_cron_file() {
             md="$(clamp_int "${SCHEDULE_MONTHLY_DAY}"    1 28  1)"
             mh="$(clamp_int "${SCHEDULE_MONTHLY_HOUR}"   0 23  3)"
             mm="$(clamp_int "${SCHEDULE_MONTHLY_MINUTE}" 0 59  0)"
-            lines+=("${mm} ${mh} ${md} * * root ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" monthly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" monthly >> ${LOG_FILE} 2>&1")
+            lines+=("${mm} ${mh} ${md} * * ${SCRIPTS_DIR}/snapshot_create.sh \"${safe_share}\" monthly >> ${LOG_FILE} 2>&1 && ${SCRIPTS_DIR}/snapshot_rotate.sh \"${safe_share}\" monthly >> ${LOG_FILE} 2>&1")
             ((entry_count++))
             ((share_entries++))
             log "INFO" "Cron entry for '${share}' (monthly): ${mm} ${mh} ${md} * *"

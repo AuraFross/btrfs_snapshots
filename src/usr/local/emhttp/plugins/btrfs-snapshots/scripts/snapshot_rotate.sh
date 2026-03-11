@@ -184,12 +184,12 @@ snap_to_epoch() {
 # Get Snapshot Type from Metadata
 ###############################################################################
 
-# Reads the type= field from .snapshot_meta inside a snapshot directory.
+# Reads the type= field from the .meta sidecar file alongside the snapshot.
 # Returns "manual" if the meta file is missing or has no type field.
 # Only daily, weekly, monthly snapshots are auto-rotatable.
 get_snap_type() {
     local snap_path="$1"
-    local meta_file="${snap_path}/.snapshot_meta"
+    local meta_file="${snap_path}.meta"
     if [[ -f "$meta_file" ]]; then
         local snap_type
         snap_type="$(grep -m1 '^type=' "$meta_file" 2>/dev/null | cut -d'=' -f2)"

@@ -210,13 +210,13 @@ create_snapshot() {
     if btrfs subvolume snapshot -r "${share_path}" "${snap_path}" &>/dev/null; then
         log "INFO" "Created snapshot: ${snap_path} (type=${snap_type})"
 
-        # Write metadata file for tracking
-        cat > "${snap_path}/.snapshot_meta" 2>/dev/null <<-SNAPMETA || true
-		type=${snap_type}
-		created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-		share=$(basename "${share_path}")
-		disk=$(echo "${share_path}" | grep -oP '/mnt/[^/]+')
-		SNAPMETA
+        # Write metadata file alongside the snapshot (not inside — snapshot is read-only)
+        cat > "${snap_path}.meta" <<-SNAPMETA
+type=${snap_type}
+created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+share=$(basename "${share_path}")
+disk=$(echo "${share_path}" | grep -oP '/mnt/[^/]+')
+SNAPMETA
 
         return 0
     else
