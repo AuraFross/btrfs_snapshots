@@ -289,15 +289,27 @@ function count_snapshots(string $share): int {
 }
 
 /**
+ * Parse a @GMT-YYYY.MM.DD-HH.MM.SS snapshot name into a UTC epoch integer.
+ * Returns 0 if the name doesn't match the expected format.
+ */
+function gmt_name_to_epoch(string $name): int {
+    if (preg_match('/@GMT-(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2})/', $name, $m)) {
+        $epoch = gmmktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]);
+        return $epoch !== false ? (int)$epoch : 0;
+    }
+    return 0;
+}
+
+/**
  * Get the most recent snapshot timestamp for a share.
- * Returns ISO 8601 date string or null if no snapshots.
+ * Returns UTC date string or null if no snapshots.
  */
 function get_last_snapshot(string $share): ?string {
     $share = sanitize_share_name($share);
     if ($share === '') return null;
     $share_cfg = get_share_config($share);
     $snapdir = $share_cfg['SNAPDIR'] ?: '.snapshots';
-    $latest = null;
+    $latest = 0;
     $disks = get_share_disks($share);
     foreach ($disks as $disk) {
         $snap_path = $disk . '/' . $share . '/' . $snapdir;
@@ -305,15 +317,12 @@ function get_last_snapshot(string $share): ?string {
         $entries = @scandir($snap_path) ?: [];
         foreach ($entries as $entry) {
             if ($entry === '.' || $entry === '..') continue;
-            $full = $snap_path . '/' . $entry;
-            if (!is_dir($full)) continue;
-            $mtime = @filemtime($full);
-            if ($mtime && ($latest === null || $mtime > $latest)) {
-                $latest = $mtime;
-            }
+            if (!is_dir($snap_path . '/' . $entry)) continue;
+            $epoch = gmt_name_to_epoch($entry);
+            if ($epoch > $latest) $latest = $epoch;
         }
     }
-    return $latest ? date('Y-m-d H:i:s', $latest) : null;
+    return $latest > 0 ? gmdate('Y-m-d H:i:s', $latest) . ' UTC' : null;
 }
 
 /**
@@ -335,7 +344,11 @@ function list_share_snapshots(string $share): array {
             if ($entry === '.' || $entry === '..') continue;
             $full = $snap_path . '/' . $entry;
             if (!is_dir($full)) continue;
-            // Get snapshot info via btrfs if available
+            $epoch = gmt_name_to_epoch($entry);
+            $created = $epoch > 0
+                ? gmdate('Y-m-d H:i:s', $epoch) . ' UTC'
+                : date('Y-m-d H:i:s', filemtime($full));
+            // Get snapshot size via btrfs if available
             $size = '—';
             $escaped = escapeshellarg($full);
             $info = @shell_exec("btrfs subvolume show {$escaped} 2>/dev/null");
@@ -346,14 +359,15 @@ function list_share_snapshots(string $share): array {
                 'name'    => $entry,
                 'path'    => $full,
                 'disk'    => basename($disk),
-                'created' => date('Y-m-d H:i:s', filemtime($full)),
+                'created' => $created,
+                'epoch'   => $epoch,
                 'size'    => $size,
             ];
         }
     }
-    // Sort by created descending (newest first)
+    // Sort by epoch descending (newest first)
     usort($snapshots, function ($a, $b) {
-        return strcmp($b['created'], $a['created']);
+        return $b['epoch'] <=> $a['epoch'];
     });
     return $snapshots;
 }
