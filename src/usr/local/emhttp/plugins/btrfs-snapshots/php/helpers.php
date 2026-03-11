@@ -322,7 +322,7 @@ function get_last_snapshot(string $share): ?string {
             if ($epoch > $latest) $latest = $epoch;
         }
     }
-    return $latest > 0 ? gmdate('Y-m-d H:i:s', $latest) . ' UTC' : null;
+    return $latest > 0 ? date('Y-m-d H:i:s', $latest) : null;
 }
 
 /**
@@ -346,7 +346,7 @@ function list_share_snapshots(string $share): array {
             if (!is_dir($full)) continue;
             $epoch = gmt_name_to_epoch($entry);
             $created = $epoch > 0
-                ? gmdate('Y-m-d H:i:s', $epoch) . ' UTC'
+                ? date('Y-m-d H:i:s', $epoch)
                 : date('Y-m-d H:i:s', filemtime($full));
             // Get snapshot size via btrfs if available
             $size = '—';
